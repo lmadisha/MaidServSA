@@ -50,6 +50,12 @@ export interface User {
   placeOfBirth?: string;
   nationality?: string;
   residencyStatus?: string; // New field for visa/citizenship status
+  
+  // Extended Profile Details
+  languages?: string;
+  educationLevel?: string;
+  maritalStatus?: string;
+  school?: string;
 
   // Maid Specific
   cvFileName?: string;
