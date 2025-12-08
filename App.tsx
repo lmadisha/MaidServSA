@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import { User, UserRole, Job, JobStatus, Application, ApplicationStatus, Message, Review, Notification, PaymentType, JobHistoryEntry, ExperienceAnswer } from './types';
 import { generateJobDescription, analyzeCandidateMatch } from './services/geminiService';
@@ -121,6 +121,17 @@ const Navbar: React.FC<{
     setShowNotifications(false);
   }
 
+  const handleLogoClick = () => {
+      if (currentUser) {
+          if (currentUser.role === UserRole.CLIENT) navigate('/client/dashboard');
+          else if (currentUser.role === UserRole.MAID) navigate('/maid/dashboard');
+          else if (currentUser.role === UserRole.ADMIN) navigate('/admin/dashboard');
+          else navigate('/');
+      } else {
+          navigate('/');
+      }
+  };
+
   const getNotificationIcon = (type: string) => {
       switch (type) {
           case 'success': return <IconCheckCircle className="w-5 h-5 text-green-500" />;
@@ -134,7 +145,7 @@ const Navbar: React.FC<{
     <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
+          <div className="flex items-center cursor-pointer" onClick={handleLogoClick}>
             <IconSparkles className="h-8 w-8 text-teal-600 mr-2" />
             <span className="text-xl font-bold text-gray-900 tracking-tight">MaidServ<span className="text-teal-600">SA</span></span>
           </div>
@@ -568,10 +579,19 @@ const CalendarView: React.FC<{ applications: Application[]; jobs: Job[]; current
           const day = i + 1;
           const events = getEventsForDay(day);
           const hasConfirmed = events.some(e => e.app.status === ApplicationStatus.ACCEPTED);
+          const hasPending = events.some(e => e.app.status === ApplicationStatus.PENDING);
           const isConflict = events.length > 1;
+
+          let cellClass = 'bg-white border-gray-100';
+          if (hasConfirmed) {
+            cellClass = 'bg-green-50 border-green-200 shadow-sm border-2';
+          } else if (hasPending) {
+            cellClass = 'bg-yellow-50 border-yellow-200 border-dashed border-2';
+          }
+
           return (
-             <div key={day} className={`h-28 border rounded-lg p-2 text-xs relative overflow-hidden transition-all hover:shadow-md ${hasConfirmed ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100'} ${isConflict ? 'ring-2 ring-red-300' : ''}`}>
-                <span className={`font-medium ${hasConfirmed ? 'text-green-800' : 'text-gray-700'}`}>{day}</span>
+             <div key={day} className={`h-28 border rounded-lg p-2 text-xs relative overflow-hidden transition-all hover:shadow-md ${cellClass} ${isConflict ? 'ring-2 ring-red-300' : ''}`}>
+                <span className={`font-medium ${hasConfirmed ? 'text-green-800' : hasPending ? 'text-yellow-800' : 'text-gray-700'}`}>{day}</span>
                 <div className="mt-1 space-y-1">
                   {events.map((e, idx) => (
                     <div key={idx} className={`truncate px-1.5 py-1 rounded text-[10px] font-medium ${e.app.status === ApplicationStatus.ACCEPTED ? 'bg-green-200 text-green-900' : e.app.status === ApplicationStatus.PENDING ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>{e.job.title}</div>
@@ -583,9 +603,9 @@ const CalendarView: React.FC<{ applications: Application[]; jobs: Job[]; current
         })}
       </div>
       <div className="mt-6 flex gap-4 text-xs text-gray-500">
-          <div className="flex items-center"><div className="w-3 h-3 bg-green-200 rounded mr-2"></div> Confirmed Booking</div>
-          <div className="flex items-center"><div className="w-3 h-3 bg-yellow-100 rounded mr-2"></div> Pending Application</div>
-          <div className="flex items-center"><div className="w-3 h-3 border-2 border-red-300 rounded mr-2"></div> Potential Conflict</div>
+          <div className="flex items-center"><div className="w-4 h-4 bg-green-50 border-2 border-green-200 rounded mr-2"></div> Confirmed Booking</div>
+          <div className="flex items-center"><div className="w-4 h-4 bg-yellow-50 border-2 border-yellow-200 border-dashed rounded mr-2"></div> Pending Application</div>
+          <div className="flex items-center"><div className="w-4 h-4 border-2 border-red-300 rounded mr-2"></div> Potential Conflict</div>
       </div>
     </div>
   );
@@ -829,7 +849,7 @@ const ClientDashboard: React.FC<{
   onRateUser: (jobId: string, revieweeId: string, rating: number, comment: string) => void;
 }> = ({ user, jobs, applications, users, reviews, onPostJob, onEditJob, onDeleteJob, onAcceptApplication, onCancelJob, onCompleteJob, onRateUser }) => {
   const [activeTab, setActiveTab] = useState<'jobs' | 'post'>('jobs');
-  const [newJob, setNewJob] = useState<Partial<Job>>({ rooms: 1, bathrooms: 1, areaSize: 50, location: '', price: 300, paymentType: PaymentType.FIXED });
+  const [newJob, setNewJob] = useState<Partial<Job>>({ rooms: 1, bathrooms: 1, areaSize: 50, location: '', price: 300, paymentType: PaymentType.FIXED, images: [] });
   const [requirements, setRequirements] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
@@ -860,6 +880,18 @@ const ClientDashboard: React.FC<{
       }
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+          const files = Array.from(e.target.files);
+          const newImageUrls = files.map(file => URL.createObjectURL(file));
+          setNewJob(prev => ({ ...prev, images: [...(prev.images || []), ...newImageUrls] }));
+      }
+  };
+
+  const handleRemoveImage = (index: number) => {
+      setNewJob(prev => ({ ...prev, images: (prev.images || []).filter((_, i) => i !== index) }));
+  };
+
   const handleSubmitJob = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newJob.title || !newJob.description || selectedDates.length === 0) { alert("Please fill in all fields and select at least one date."); return; }
@@ -877,7 +909,7 @@ const ClientDashboard: React.FC<{
       status: editingJob ? editingJob.status : JobStatus.OPEN,
       rooms: newJob.rooms!,
       bathrooms: newJob.bathrooms!,
-      images: [],
+      images: newJob.images || [],
       paymentType: newJob.paymentType!,
       startTime: '08:00',
       endTime: '12:00',
@@ -896,14 +928,14 @@ const ClientDashboard: React.FC<{
     }
     
     setActiveTab('jobs'); 
-    setNewJob({ rooms: 1, bathrooms: 1, areaSize: 50, location: '', price: 300, paymentType: PaymentType.FIXED });
+    setNewJob({ rooms: 1, bathrooms: 1, areaSize: 50, location: '', price: 300, paymentType: PaymentType.FIXED, images: [] });
     setSelectedDates([]); 
     setRequirements('');
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-900">Client Dashboard</h2><div className="flex space-x-4"><button onClick={() => { setActiveTab('jobs'); setEditingJob(null); }} className={`px-4 py-2 rounded-lg ${activeTab === 'jobs' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>My Jobs</button><button onClick={() => { setActiveTab('post'); setEditingJob(null); setNewJob({ rooms: 1, bathrooms: 1, areaSize: 50, location: '', price: 300, paymentType: PaymentType.FIXED }); setSelectedDates([]); }} className={`px-4 py-2 rounded-lg ${activeTab === 'post' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>Post New Job</button></div></div>
+      <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-gray-900">Client Dashboard</h2><div className="flex space-x-4"><button onClick={() => { setActiveTab('jobs'); setEditingJob(null); }} className={`px-4 py-2 rounded-lg ${activeTab === 'jobs' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>My Jobs</button><button onClick={() => { setActiveTab('post'); setEditingJob(null); setNewJob({ rooms: 1, bathrooms: 1, areaSize: 50, location: '', price: 300, paymentType: PaymentType.FIXED, images: [] }); setSelectedDates([]); }} className={`px-4 py-2 rounded-lg ${activeTab === 'post' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>Post New Job</button></div></div>
       {activeTab === 'post' ? (
         <div className="bg-white shadow rounded-lg p-6">
            <div className="flex justify-between items-center mb-4">
@@ -917,6 +949,36 @@ const ClientDashboard: React.FC<{
                 <div className="grid grid-cols-2 gap-4"><div><label className="block text-sm font-medium text-gray-700">Rooms</label><input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm p-2 border bg-white text-gray-900" value={newJob.rooms || ''} onChange={e => setNewJob({...newJob, rooms: Number(e.target.value)})} /></div><div><label className="block text-sm font-medium text-gray-700">Bathrooms</label><input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm p-2 border bg-white text-gray-900" value={newJob.bathrooms || ''} onChange={e => setNewJob({...newJob, bathrooms: Number(e.target.value)})} /></div></div>
                 <div><label className="block text-sm font-medium text-gray-700">Size (sqm)</label><input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm p-2 border bg-white text-gray-900" value={newJob.areaSize || ''} onChange={e => setNewJob({...newJob, areaSize: Number(e.target.value)})} /></div>
               </div>
+              
+              <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Images</label>
+                  <div className="flex flex-col space-y-2">
+                      <input 
+                          type="file" 
+                          multiple 
+                          accept="image/*" 
+                          onChange={handleImageUpload}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                      />
+                      {newJob.images && newJob.images.length > 0 && (
+                          <div className="flex gap-2 flex-wrap mt-2">
+                              {newJob.images.map((img, idx) => (
+                                  <div key={idx} className="relative group">
+                                      <img src={img} alt={`Preview ${idx}`} className="h-20 w-20 object-cover rounded-md border border-gray-200" />
+                                      <button 
+                                          type="button" 
+                                          onClick={() => handleRemoveImage(idx)} 
+                                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                      >
+                                          <IconXCircle className="w-4 h-4" />
+                                      </button>
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                  </div>
+              </div>
+
               <div><label className="block text-sm font-medium text-gray-700 mb-2">Select Dates</label><CalendarInput selectedDates={selectedDates} onChange={setSelectedDates} /></div>
               <div><label className="block text-sm font-medium text-gray-700">Specific Requirements (for AI generation)</label><textarea className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm p-2 border bg-white text-gray-900" rows={3} value={requirements} onChange={e => setRequirements(e.target.value)} placeholder="e.g. Need deep cleaning for windows, have pets..." /></div>
               <div className="flex justify-end"><button type="button" onClick={handleGenerateDescription} disabled={isGenerating} className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"><IconSparkles className="mr-2 h-5 w-5 text-yellow-500" />{isGenerating ? 'Generating...' : 'Generate Description with AI'}</button></div>
@@ -928,7 +990,9 @@ const ClientDashboard: React.FC<{
       ) : (
         <div className="space-y-6">
             {myJobs.length === 0 && <div className="text-center text-gray-500 py-10">No jobs posted yet.</div>}
-            {myJobs.map(job => (
+            {myJobs.map(job => {
+                const jobApplications = applications.filter(a => a.jobId === job.id);
+                return (
                 <div key={job.id} className="bg-white shadow rounded-lg p-6">
                     <div className="flex justify-between items-start">
                         <div><h3 className="text-lg font-medium text-gray-900">{job.title}</h3><p className="text-sm text-gray-500 mt-1">{job.location} • {job.rooms} Bed, {job.bathrooms} Bath</p><p className="text-sm text-gray-500">{job.workDates.length} days • R{job.price}</p></div>
@@ -965,9 +1029,35 @@ const ClientDashboard: React.FC<{
                     ) })}{applications.filter(a => a.jobId === job.id && a.status === ApplicationStatus.PENDING).length === 0 && (<p className="text-xs text-gray-500 italic">No pending applications.</p>)}</div></div>)}
                     {job.status === JobStatus.IN_PROGRESS && (<div className="mt-6 border-t border-gray-200 pt-4 flex justify-between items-center"><div className="flex items-center"><span className="text-sm text-gray-500 mr-2">Assigned to:</span><span className="text-sm font-medium">{users.find(u => u.id === job.assignedMaidId)?.name}</span><Link to={`/chat/${applications.find(a => a.jobId === job.id && a.status === ApplicationStatus.ACCEPTED)?.id}`} className="ml-2 text-teal-600 hover:text-teal-800"><IconMessageSquare className="w-5 h-5"/></Link></div><div className="flex gap-2"><button onClick={() => onCompleteJob(job.id)} className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">Mark Completed</button></div></div>)}
                     {job.status === JobStatus.COMPLETED && !reviews.some(r => r.jobId === job.id && r.reviewerId === user.id) && (<div className="mt-4 flex justify-end"><button onClick={() => { const maid = users.find(u => u.id === job.assignedMaidId); if(maid) { setRatingTarget({ jobId: job.id, userId: maid.id, name: maid.name }); setRatingModalOpen(true); } }} className="text-sm text-teal-600 hover:text-teal-800 font-medium">Rate Service</button></div>)}
+                    
+                    {/* Job Application History Section */}
+                    {jobApplications.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Application Log</h4>
+                            <div className="space-y-2">
+                                {jobApplications.map(app => {
+                                    const applicant = users.find(u => u.id === app.maidId);
+                                    return (
+                                        <div key={app.id} className="text-xs text-gray-600 flex justify-between items-center bg-gray-50 px-2 py-1 rounded">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium text-gray-900">{applicant ? applicant.name : app.maidId}</span>
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                                    app.status === ApplicationStatus.ACCEPTED ? 'bg-green-100 text-green-800' :
+                                                    app.status === ApplicationStatus.REJECTED ? 'bg-red-100 text-red-800' :
+                                                    app.status === ApplicationStatus.PENDING ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
+                                                }`}>{app.status}</span>
+                                            </div>
+                                            <span className="text-gray-400">{new Date(app.appliedAt).toLocaleString()}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    
                     <JobHistoryList history={job.history} />
                 </div>
-            ))}
+            )})}
         </div>
       )}
       {ratingTarget && (<RatingModal isOpen={ratingModalOpen} onClose={() => setRatingModalOpen(false)} targetName={ratingTarget.name} onSubmit={(rating, comment) => onRateUser(ratingTarget.jobId, ratingTarget.userId, rating, comment)} />)}
@@ -976,8 +1066,6 @@ const ClientDashboard: React.FC<{
   );
 };
 
-// ... MaidDashboard ...
-// (MaidDashboard implementation remains the same but needs to be included because it's part of the file)
 const MaidDashboard: React.FC<{
   user: User;
   jobs: Job[];
@@ -985,319 +1073,368 @@ const MaidDashboard: React.FC<{
   onApply: (jobId: string, message: string) => void;
 }> = ({ user, jobs, applications, onApply }) => {
   const [activeTab, setActiveTab] = useState<'find' | 'my'>('find');
-  const [applyMsg, setApplyMsg] = useState('');
-  const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
-
-  const myApplications = applications.filter(a => a.maidId === user.id);
-  const appliedJobIds = myApplications.map(a => a.jobId);
   
-  const availableJobs = jobs.filter(j => j.status === JobStatus.OPEN && !appliedJobIds.includes(j.id));
-  const myJobs = jobs.filter(j => j.assignedMaidId === user.id);
-
-  const handleApply = (jobId: string) => {
-    onApply(jobId, applyMsg);
-    setApplyingJobId(null);
-    setApplyMsg('');
-  };
+  const availableJobs = jobs.filter(j => j.status === JobStatus.OPEN);
+  const myApps = applications.filter(a => a.maidId === user.id);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-6">
-         <h2 className="text-2xl font-bold text-gray-900">Maid Dashboard</h2>
-         <div className="flex space-x-4">
-            <button onClick={() => setActiveTab('find')} className={`px-4 py-2 rounded-lg ${activeTab === 'find' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>Find Work</button>
-            <button onClick={() => setActiveTab('my')} className={`px-4 py-2 rounded-lg ${activeTab === 'my' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>My Jobs & Apps</button>
-         </div>
+        <h2 className="text-2xl font-bold text-gray-900">Maid Dashboard</h2>
+        <div className="flex space-x-4">
+           <button onClick={() => setActiveTab('find')} className={`px-4 py-2 rounded-lg ${activeTab === 'find' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>Find Jobs</button>
+           <button onClick={() => setActiveTab('my')} className={`px-4 py-2 rounded-lg ${activeTab === 'my' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'}`}>My Applications</button>
+        </div>
       </div>
 
-      {activeTab === 'find' && (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-           {availableJobs.map(job => (
-             <div key={job.id} className="bg-white overflow-hidden shadow rounded-lg">
-                <img src={job.images[0]} alt="" className="h-48 w-full object-cover" />
-                <div className="px-4 py-5 sm:p-6">
-                   <h3 className="text-lg font-medium text-gray-900 truncate">{job.title}</h3>
-                   <div className="mt-2 text-sm text-gray-500">
-                      <p className="flex items-center"><IconMapPin className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />{job.location}</p>
-                      <p className="flex items-center mt-1"><IconCalendar className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />{job.workDates.length} Shifts • Start {job.date}</p>
-                      <p className="flex items-center mt-1"><IconHome className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />{job.rooms} Bed, {job.bathrooms} Bath • {job.areaSize}m²</p>
-                   </div>
-                   <div className="mt-4 flex items-center justify-between">
-                      <span className="text-xl font-bold text-gray-900">R{job.price}</span>
-                      {applyingJobId === job.id ? (
-                        <div className="flex-1 ml-4">
-                           <input autoFocus type="text" placeholder="Short message..." className="w-full text-sm border border-gray-300 rounded-md p-2 mb-2 focus:border-teal-500 focus:ring-teal-500 bg-white text-gray-900 shadow-sm" value={applyMsg} onChange={e => setApplyMsg(e.target.value)} />
-                           <div className="flex gap-1">
-                             <button onClick={() => handleApply(job.id)} className="flex-1 bg-teal-600 text-white text-xs py-1 rounded">Send</button>
-                             <button onClick={() => setApplyingJobId(null)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-1 rounded">Cancel</button>
+      {activeTab === 'find' ? (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+           {availableJobs.map(job => {
+               const applied = myApps.some(a => a.jobId === job.id);
+               return (
+                   <div key={job.id} className="bg-white shadow rounded-lg p-6 flex flex-col justify-between">
+                       <div>
+                           <div className="flex justify-between items-start">
+                               <h3 className="text-lg font-bold text-gray-900">{job.title}</h3>
+                               <span className="bg-teal-50 text-teal-700 text-xs px-2 py-1 rounded-full">New</span>
                            </div>
-                        </div>
-                      ) : (
-                        <button onClick={() => setApplyingJobId(job.id)} className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none">Apply</button>
-                      )}
+                           <p className="text-sm text-gray-500 mt-1 flex items-center"><IconMapPin className="w-4 h-4 mr-1"/> {job.location}</p>
+                           <p className="mt-4 text-sm text-gray-600 line-clamp-3">{job.description}</p>
+                           <div className="mt-4 flex items-center justify-between">
+                               <span className="text-lg font-bold text-teal-600">R{job.price}</span>
+                               <span className="text-xs text-gray-500">{job.paymentType}</span>
+                           </div>
+                           <div className="mt-2 text-xs text-gray-500">
+                               <p>{job.rooms} Bed • {job.bathrooms} Bath • {job.areaSize}m²</p>
+                           </div>
+                       </div>
+                       <div className="mt-6">
+                           {applied ? (
+                               <button disabled className="w-full bg-gray-100 text-gray-400 py-2 rounded-lg cursor-not-allowed">Applied</button>
+                           ) : (
+                               <button onClick={() => onApply(job.id, "I'm interested!")} className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition-colors">Apply Now</button>
+                           )}
+                       </div>
                    </div>
-                </div>
-             </div>
-           ))}
-           {availableJobs.length === 0 && <p className="text-gray-500 col-span-full text-center py-10">No new jobs available at the moment.</p>}
+               )
+           })}
+           {availableJobs.length === 0 && <p className="text-gray-500 col-span-3 text-center py-10">No jobs available right now.</p>}
         </div>
-      )}
-
-      {activeTab === 'my' && (
-        <div className="space-y-8">
-           <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Active Jobs</h3>
-              <div className="bg-white shadow overflow-hidden sm:rounded-md">
-                 <ul className="divide-y divide-gray-200">
-                    {myJobs.map(job => (
-                      <li key={job.id} className="px-4 py-4 sm:px-6">
-                         <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-teal-600 truncate">{job.title}</p>
-                            <div className="ml-2 flex-shrink-0 flex">
-                               <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${job.status === JobStatus.COMPLETED ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>{job.status}</p>
+      ) : (
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+            {myApps.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No applications yet. Go to "Find Jobs" to apply.</div>
+            ) : (
+                <div className="divide-y divide-gray-200">
+                    {myApps.map(app => {
+                        const job = jobs.find(j => j.id === app.jobId);
+                        return (
+                            <div key={app.id} className="p-6 hover:bg-gray-50 transition-colors">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h4 className="text-lg font-medium text-gray-900">{job?.title}</h4>
+                                        <p className="text-sm text-gray-500">Applied: {new Date(app.appliedAt).toLocaleDateString()}</p>
+                                        <p className="text-sm text-gray-600 mt-1">Status: <span className={`font-medium ${
+                                            app.status === ApplicationStatus.ACCEPTED ? 'text-green-600' :
+                                            app.status === ApplicationStatus.REJECTED ? 'text-red-600' :
+                                            'text-yellow-600'
+                                        }`}>{app.status}</span></p>
+                                    </div>
+                                    <Link to={`/chat/${app.id}`} className="p-2 text-gray-400 hover:text-teal-600">
+                                        <IconMessageSquare className="w-6 h-6" />
+                                    </Link>
+                                </div>
                             </div>
-                         </div>
-                         <div className="mt-2 sm:flex sm:justify-between">
-                            <div className="sm:flex">
-                               <p className="flex items-center text-sm text-gray-500"><IconMapPin className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />{job.location}</p>
-                            </div>
-                            <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                               <IconCalendar className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
-                               <p>Next: {job.workDates[0]}</p>
-                            </div>
-                         </div>
-                      </li>
-                    ))}
-                    {myJobs.length === 0 && <li className="px-4 py-4 text-sm text-gray-500 text-center">No active jobs.</li>}
-                 </ul>
-              </div>
-           </div>
-           
-           <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">My Applications</h3>
-              <div className="bg-white shadow overflow-hidden sm:rounded-md">
-                 <ul className="divide-y divide-gray-200">
-                    {myApplications.map(app => {
-                       const job = jobs.find(j => j.id === app.jobId);
-                       if (!job) return null;
-                       return (
-                         <li key={app.id} className="px-4 py-4 sm:px-6">
-                            <div className="flex items-center justify-between">
-                               <p className="text-sm font-medium text-gray-900">{job.title}</p>
-                               <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${app.status === ApplicationStatus.ACCEPTED ? 'bg-green-100 text-green-800' : app.status === ApplicationStatus.REJECTED ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{app.status}</span>
-                            </div>
-                            <p className="mt-1 text-sm text-gray-500">Applied on {new Date(app.appliedAt).toLocaleDateString()}</p>
-                         </li>
-                       );
+                        )
                     })}
-                    {myApplications.length === 0 && <li className="px-4 py-4 text-sm text-gray-500 text-center">No applications yet.</li>}
-                 </ul>
-              </div>
-           </div>
-           
-           <div className="mt-8">
-               <h3 className="text-lg font-medium text-gray-900 mb-4">Schedule</h3>
-               <CalendarView applications={applications} jobs={jobs} currentUserId={user.id} />
-           </div>
+                </div>
+            )}
         </div>
       )}
     </div>
   );
 };
 
-// ... AdminDashboard, ChatPage ...
 const AdminDashboard: React.FC = () => (
-    <div className="p-10 text-center text-gray-500">Admin Dashboard Placeholder</div>
+    <div className="p-8 text-center">
+        <h2 className="text-2xl font-bold mb-4">Admin Dashboard</h2>
+        <p>System administration tools would go here.</p>
+    </div>
 );
 
 const ChatPage: React.FC<{
-  currentUser: User;
-  messages: Message[];
+  currentUser: User | null;
+  applications: Application[];
+  jobs: Job[];
   users: User[];
+  messages: Message[];
   onSendMessage: (receiverId: string, content: string, jobId: string) => void;
-}> = ({ currentUser, messages, users, onSendMessage }) => {
-    const { id } = useParams<{id: string}>();
+}> = ({ currentUser, applications, jobs, users, messages, onSendMessage }) => {
+    const { applicationId } = useParams<{ applicationId: string }>();
     const [newMessage, setNewMessage] = useState('');
-    
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const application = applications.find(a => a.id === applicationId);
+    const job = application ? jobs.find(j => j.id === application.jobId) : null;
+
+    let otherUserId = '';
+    if (application && job && currentUser) {
+        if (currentUser.id === job.clientId) {
+            otherUserId = application.maidId;
+        } else if (currentUser.id === application.maidId) {
+            otherUserId = job.clientId;
+        }
+    }
+    const otherUser = users.find(u => u.id === otherUserId);
+
+    // Use useMemo to filter and sort messages, ensuring safe dependency tracking
+    const chatMessages = useMemo(() => {
+        if (!currentUser || !job || !otherUserId) return [];
+        return messages.filter(m => 
+            m.jobId === job.id && 
+            ((m.senderId === currentUser.id && m.receiverId === otherUserId) || 
+             (m.senderId === otherUserId && m.receiverId === currentUser.id))
+        ).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    }, [messages, job, currentUser, otherUserId]);
+
+    const handleSend = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newMessage.trim() || !otherUserId || !job || !currentUser) return;
+        onSendMessage(otherUserId, newMessage, job.id);
+        setNewMessage('');
+    };
+
+    // Hook must be called unconditionally at the top level
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages]);
+
+    // Conditional returns must happen AFTER all hooks
+    if (!currentUser) return <Navigate to="/auth" />;
+
+    if (!application || !job || !otherUser) {
+        return <div className="p-8 text-center text-gray-500">Conversation not found.</div>;
+    }
+
     return (
         <div className="max-w-4xl mx-auto px-4 py-8 h-[calc(100vh-64px)] flex flex-col">
-            <div className="bg-white shadow rounded-lg flex-1 flex flex-col overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                    <h3 className="text-lg font-medium text-gray-900">Chat</h3>
-                    <Link to={currentUser.role === UserRole.CLIENT ? "/client/dashboard" : "/maid/dashboard"} className="text-sm text-teal-600 hover:text-teal-800">Back to Dashboard</Link>
+            <div className="bg-white shadow-sm border-b border-gray-200 rounded-t-lg px-6 py-4 flex justify-between items-center">
+                <div className="flex items-center">
+                    <img src={otherUser.avatar} className="w-10 h-10 rounded-full mr-3 object-cover" alt={otherUser.name} />
+                    <div>
+                        <h3 className="text-lg font-medium text-gray-900">{otherUser.name}</h3>
+                        <p className="text-xs text-gray-500">{job.title}</p>
+                    </div>
                 </div>
-                <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
-                    <div className="text-center text-gray-500 text-sm my-4">This is the start of your conversation.</div>
-                </div>
-                <div className="px-4 py-4 border-t border-gray-200 bg-white">
-                   <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setNewMessage(''); }}>
-                       <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 p-2 border bg-white text-gray-900" placeholder="Type a message..." />
-                       <button type="submit" className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700"><IconSend className="h-5 w-5" /></button>
-                   </form>
-                </div>
+                <Link to={currentUser.role === UserRole.CLIENT ? "/client/dashboard" : "/maid/dashboard"} className="text-sm text-teal-600 hover:text-teal-800">
+                    Back to Dashboard
+                </Link>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-4">
+                {chatMessages.length === 0 && (
+                    <p className="text-center text-gray-400 text-sm py-10">Start the conversation with {otherUser.firstName || otherUser.name}...</p>
+                )}
+                {chatMessages.map(msg => {
+                    const isMe = msg.senderId === currentUser.id;
+                    return (
+                        <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[70%] rounded-lg px-4 py-2 text-sm shadow-sm ${
+                                isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'
+                            }`}>
+                                <p>{msg.content}</p>
+                                <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-teal-200' : 'text-gray-400'}`}>
+                                    {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })}
+                <div ref={messagesEndRef} />
+            </div>
+
+            <div className="bg-white border-t border-gray-200 p-4 rounded-b-lg">
+                <form onSubmit={handleSend} className="flex gap-3">
+                    <input 
+                        type="text" 
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        className="flex-1 border-gray-300 rounded-full focus:ring-teal-500 focus:border-teal-500 shadow-sm px-4 py-2 border bg-gray-50 text-sm text-gray-900"
+                        placeholder="Type your message..."
+                    />
+                    <button type="submit" disabled={!newMessage.trim()} className="bg-teal-600 text-white rounded-full p-2 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        <IconSend className="w-5 h-5" />
+                    </button>
+                </form>
             </div>
         </div>
     );
 };
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [jobs, setJobs] = useState<Job[]>(MOCK_JOBS);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  // Initialize notifications from mock for demo
-  useEffect(() => {
-    if (user) {
-        setNotifications(prev => [
-            ...prev,
-            { id: `welcome_${user.id}`, userId: user.id, message: `Welcome to MaidServSA, ${user.firstName}!`, type: 'info', read: false, timestamp: new Date().toISOString() }
-        ]);
-    }
-  }, [user]);
-
-  const handleLogin = (selectedUser: User) => {
-    setUser(selectedUser);
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
   };
 
   const handleLogout = () => {
-    setUser(null);
+    setCurrentUser(null);
   };
 
-  const handleUpdateUser = (updatedUser: User) => {
-    setUser(updatedUser);
-  };
-
-  const handleMarkRead = () => {
-    setNotifications(prev => prev.map(n => ({...n, read: true})));
-  };
-
-  // --- JOB MANAGEMENT ---
   const handlePostJob = (job: Job) => {
-    setJobs(prev => [job, ...prev]);
-    alert('Job posted successfully!');
-  };
-
-  const handleEditJob = (updatedJob: Job) => {
-      setJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
-  };
-
-  const handleDeleteJob = (jobId: string) => {
-      setJobs(prev => prev.filter(j => j.id !== jobId));
-  };
-
-  const handleCancelJob = (jobId: string) => {
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: JobStatus.CANCELLED } : j));
-  };
-
-  const handleCompleteJob = (jobId: string) => {
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: JobStatus.COMPLETED } : j));
-  };
-
-  // --- APPLICATION MANAGEMENT ---
-  const handleApply = (jobId: string, message: string) => {
-    if (!user) return;
-    
-    // Check if already applied
-    if (applications.some(a => a.jobId === jobId && a.maidId === user.id)) {
-        alert('You have already applied for this job.');
-        return;
-    }
-
-    const newApp: Application = {
-        id: `app_${Date.now()}`,
-        jobId,
-        maidId: user.id,
-        status: ApplicationStatus.PENDING,
-        message,
-        appliedAt: new Date().toISOString()
-    };
-    
-    setApplications(prev => [...prev, newApp]);
-    
-    // Notify the client (mock)
-    const job = jobs.find(j => j.id === jobId);
-    if (job) {
-        console.log(`Notification sent to client ${job.clientId}`);
-    }
-    
-    setNotifications(prev => [...prev, {
-        id: `notif_${Date.now()}`,
-        userId: user.id,
-        message: 'Application sent successfully!',
+    setJobs([...jobs, job]);
+    setNotifications([...notifications, {
+        id: Date.now().toString(),
+        userId: job.clientId,
+        message: `Job "${job.title}" posted successfully.`,
         type: 'success',
         read: false,
         timestamp: new Date().toISOString()
     }]);
   };
 
+  const handleEditJob = (updatedJob: Job) => {
+    setJobs(jobs.map(j => j.id === updatedJob.id ? updatedJob : j));
+  };
+
+  const handleDeleteJob = (jobId: string) => {
+    setJobs(jobs.filter(j => j.id !== jobId));
+  };
+  
   const handleAcceptApplication = (appId: string, jobId: string) => {
-      // Update application status
-      setApplications(prev => prev.map(a => a.id === appId ? { ...a, status: ApplicationStatus.ACCEPTED } : a.jobId === jobId && a.id !== appId ? { ...a, status: ApplicationStatus.REJECTED } : a));
-      
-      // Update job status and assignment
+      setApplications(applications.map(a => {
+          if (a.id === appId) return { ...a, status: ApplicationStatus.ACCEPTED };
+          if (a.jobId === jobId && a.id !== appId) return { ...a, status: ApplicationStatus.REJECTED };
+          return a;
+      }));
       const app = applications.find(a => a.id === appId);
       if (app) {
-          setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: JobStatus.IN_PROGRESS, assignedMaidId: app.maidId } : j));
+          setJobs(jobs.map(j => j.id === jobId ? { ...j, status: JobStatus.IN_PROGRESS, assignedMaidId: app.maidId } : j));
       }
   };
 
-  // --- REVIEWS ---
+  const handleCancelJob = (jobId: string) => {
+      setJobs(jobs.map(j => j.id === jobId ? { ...j, status: JobStatus.CANCELLED } : j));
+  };
+
+  const handleCompleteJob = (jobId: string) => {
+      setJobs(jobs.map(j => j.id === jobId ? { ...j, status: JobStatus.COMPLETED } : j));
+  };
+
   const handleRateUser = (jobId: string, revieweeId: string, rating: number, comment: string) => {
-      alert(`Rating submitted: ${rating} stars`);
-      // In a real app, save this to a reviews state
+      if (!currentUser) return;
+      const review: Review = {
+          id: Date.now().toString(),
+          jobId,
+          reviewerId: currentUser.id,
+          revieweeId,
+          rating,
+          comment,
+          createdAt: new Date().toISOString()
+      };
+      setReviews([...reviews, review]);
+      
+      // Update user rating
+      setUsers(users.map(u => {
+          if (u.id === revieweeId) {
+              const newCount = u.ratingCount + 1;
+              const newRating = ((u.rating * u.ratingCount) + rating) / newCount;
+              return { ...u, rating: newRating, ratingCount: newCount };
+          }
+          return u;
+      }));
+  };
+  
+  const handleUpdateProfile = (updatedUser: User) => {
+      setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
+      if (currentUser && currentUser.id === updatedUser.id) {
+          setCurrentUser(updatedUser);
+      }
+  };
+
+  const handleApply = (jobId: string, message: string) => {
+    if (!currentUser) return;
+    const newApp: Application = {
+      id: `app_${Date.now()}`,
+      jobId,
+      maidId: currentUser.id,
+      status: ApplicationStatus.PENDING,
+      message,
+      appliedAt: new Date().toISOString()
+    };
+    setApplications([...applications, newApp]);
+  };
+
+  const handleMarkNotificationsRead = () => {
+    if (!currentUser) return;
+    setNotifications(notifications.map(n => n.userId === currentUser.id ? { ...n, read: true } : n));
+  };
+
+  const handleSendMessage = (receiverId: string, content: string, jobId: string) => {
+      if (!currentUser) return;
+      const newMessage: Message = {
+          id: `msg_${Date.now()}`,
+          senderId: currentUser.id,
+          receiverId,
+          content,
+          timestamp: new Date().toISOString(),
+          jobId
+      };
+      setMessages(prev => [...prev, newMessage]);
   };
 
   return (
     <HashRouter>
-      <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-        <Navbar 
-            currentUser={user} 
-            notifications={notifications} 
-            onLogout={handleLogout} 
-            onMarkNotificationsRead={handleMarkRead}
-        />
-        <Routes>
-          <Route path="/" element={<LandingPage currentUser={user} />} />
-          <Route path="/auth" element={<AuthPage onLogin={handleLogin} />} />
-          <Route path="/profile" element={user ? <ProfilePage user={user} onUpdate={handleUpdateUser} /> : <Navigate to="/" replace />} />
-          
-          <Route path="/client/dashboard" element={
-            user && user.role === UserRole.CLIENT 
-            ? <ClientDashboard 
-                user={user} 
+      <Navbar currentUser={currentUser} notifications={notifications} onLogout={handleLogout} onMarkNotificationsRead={handleMarkNotificationsRead} />
+      <Routes>
+        <Route path="/" element={<LandingPage currentUser={currentUser} />} />
+        <Route path="/auth" element={<AuthPage onLogin={handleLogin} />} />
+        <Route path="/profile" element={currentUser ? <ProfilePage user={currentUser} onUpdate={handleUpdateProfile} /> : <Navigate to="/auth" />} />
+        <Route path="/client/dashboard" element={
+            currentUser?.role === UserRole.CLIENT ? 
+            <ClientDashboard 
+                user={currentUser} 
                 jobs={jobs} 
                 applications={applications} 
-                users={MOCK_USERS} 
-                reviews={[]} 
-                onPostJob={handlePostJob} 
-                onEditJob={handleEditJob} 
-                onDeleteJob={handleDeleteJob} 
-                onAcceptApplication={handleAcceptApplication} 
-                onCancelJob={handleCancelJob} 
-                onCompleteJob={handleCompleteJob} 
-                onRateUser={handleRateUser} 
-              /> 
-            : <Navigate to="/auth" />
-          } />
-          
-          <Route path="/maid/dashboard" element={
-            user && user.role === UserRole.MAID
-            ? <MaidDashboard 
-                user={user} 
-                jobs={jobs} 
+                users={users} 
+                reviews={reviews}
+                onPostJob={handlePostJob}
+                onEditJob={handleEditJob}
+                onDeleteJob={handleDeleteJob}
+                onAcceptApplication={handleAcceptApplication}
+                onCancelJob={handleCancelJob}
+                onCompleteJob={handleCompleteJob}
+                onRateUser={handleRateUser}
+            /> : <Navigate to="/" />
+        } />
+        <Route path="/maid/dashboard" element={
+            currentUser?.role === UserRole.MAID ?
+            <MaidDashboard 
+               user={currentUser}
+               jobs={jobs}
+               applications={applications}
+               onApply={handleApply}
+            /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/dashboard" element={currentUser?.role === UserRole.ADMIN ? <AdminDashboard /> : <Navigate to="/" />} />
+        <Route path="/chat/:applicationId" element={
+            <ChatPage 
+                currentUser={currentUser} 
                 applications={applications} 
-                onApply={handleApply} 
-              />
-            : <Navigate to="/auth" />
-          } />
-          
-          <Route path="/chat/:id" element={
-             user ? <ChatPage currentUser={user} messages={[]} users={MOCK_USERS} onSendMessage={() => {}} /> : <Navigate to="/auth" />
-          } />
-
-        </Routes>
-      </div>
+                jobs={jobs} 
+                users={users} 
+                messages={messages} 
+                onSendMessage={handleSendMessage} 
+            />
+        } />
+      </Routes>
     </HashRouter>
   );
 };
