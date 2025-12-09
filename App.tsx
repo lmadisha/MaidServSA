@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import { User, UserRole, Job, JobStatus, Application, ApplicationStatus, Message, Review, Notification, PaymentType, JobHistoryEntry, ExperienceAnswer } from './types';
 import { generateJobDescription, analyzeCandidateMatch } from './services/geminiService';
-import { IconCalendar, IconCheckCircle, IconHome, IconMapPin, IconMessageSquare, IconSparkles, IconUser, IconXCircle, IconSend, IconStar, IconBell, IconChevronLeft, IconChevronRight, IconClock, IconLock, IconMail, IconLogOut, IconInfo, IconAlertTriangle, IconAlertCircle, IconFileText, IconEdit, IconTrash } from './components/Icons';
+import { IconCalendar, IconCheckCircle, IconHome, IconMapPin, IconMessageSquare, IconSparkles, IconUser, IconXCircle, IconSend, IconStar, IconBell, IconChevronLeft, IconChevronRight, IconClock, IconLock, IconMail, IconLogOut, IconInfo, IconAlertTriangle, IconAlertCircle, IconFileText, IconEdit, IconTrash, IconFilter } from './components/Icons';
 
 // --- MOCK DATA ---
 const MOCK_USERS: User[] = [
@@ -820,16 +820,56 @@ const LandingPage: React.FC<{ currentUser: User | null }> = ({ currentUser }) =>
         <div className="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
           <main className="mt-10 mx-auto max-w-7xl px-4 sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 lg:px-8 xl:mt-28">
             <div className="sm:text-center lg:text-left">
-              <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl"><span className="block xl:inline">Premium cleaning services</span>{' '}<span className="block text-teal-600 xl:inline">for your home</span></h1>
-              <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">Connect with verified, professional maids in your area. Smart matching powered by AI ensures you find the perfect help for your home.</p>
+              <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
+                <span className="block xl:inline">Premium cleaning services</span>{' '}
+                <span className="block text-teal-600 xl:inline">for your home</span>
+              </h1>
+              <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">
+                Connect with verified, professional maids in your area.  
+                Hire experienced and background-checked household staff for cleaning, cooking, childcare, elder care, and more — with flexible scheduling and transparent pricing.  
+                Create a profile, list your skills, browse trusted clients, accept bookings that suit your schedule, and get paid securely.  
+                Enjoy convenience, trust, and fairness — whether you’re a homeowner or a domestic-worker looking for work.
+              </p>
               <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
-                {!currentUser ? (<div className="rounded-md shadow"><button onClick={() => navigate('/auth')} className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 md:py-4 md:text-lg">Get Started</button></div>) : (<div className="rounded-md shadow"><button onClick={() => navigate(currentUser.role === UserRole.CLIENT ? '/client/dashboard' : currentUser.role === UserRole.MAID ? '/maid/dashboard' : '/admin/dashboard')} className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 md:py-4 md:text-lg">Go to Dashboard</button></div>)}
+                {!currentUser ? (
+                  <div className="rounded-md shadow">
+                    <button
+                      onClick={() => navigate('/auth')}
+                      className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 md:py-4 md:text-lg"
+                    >
+                      Get Started
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-md shadow">
+                    <button
+                      onClick={() =>
+                        navigate(
+                          currentUser.role === UserRole.CLIENT
+                            ? '/client/dashboard'
+                            : currentUser.role === UserRole.MAID
+                            ? '/maid/dashboard'
+                            : '/admin/dashboard'
+                        )
+                      }
+                      className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 md:py-4 md:text-lg"
+                    >
+                      Go to Dashboard
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </main>
         </div>
       </div>
-      <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2"><img className="h-56 w-full object-cover sm:h-72 md:h-96 lg:w-full lg:h-full" src="https://images.unsplash.com/photo-1581578731117-104f2a863a30?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" alt="Cleaning home" /></div>
+      <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
+        <img
+          className="h-56 w-full object-cover sm:h-72 md:h-96 lg:w-full lg:h-full"
+          src="https://images.unsplash.com/photo-1581578731117-104f2a863a30?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+          alt="Cleaning home"
+        />
+      </div>
     </div>
   );
 };
@@ -1074,8 +1114,80 @@ const MaidDashboard: React.FC<{
 }> = ({ user, jobs, applications, onApply }) => {
   const [activeTab, setActiveTab] = useState<'find' | 'my'>('find');
   
-  const availableJobs = jobs.filter(j => j.status === JobStatus.OPEN);
+  // Filter & Sort State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [priceMin, setPriceMin] = useState<number | ''>('');
+  const [priceMax, setPriceMax] = useState<number | ''>('');
+  const [sizeMin, setSizeMin] = useState<number | ''>('');
+  const [sizeMax, setSizeMax] = useState<number | ''>('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'price' | 'size'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [showFilters, setShowFilters] = useState(false);
+
   const myApps = applications.filter(a => a.maidId === user.id);
+
+  const filteredJobs = useMemo(() => {
+    let result = jobs.filter(j => j.status === JobStatus.OPEN);
+
+    // Filter by Search (Location/Title)
+    if (searchTerm) {
+        const lowerTerm = searchTerm.toLowerCase();
+        result = result.filter(j => 
+            j.location.toLowerCase().includes(lowerTerm) || 
+            j.title.toLowerCase().includes(lowerTerm)
+        );
+    }
+
+    // Filter by Price
+    if (priceMin !== '') result = result.filter(j => j.price >= Number(priceMin));
+    if (priceMax !== '') result = result.filter(j => j.price <= Number(priceMax));
+
+    // Filter by Size
+    if (sizeMin !== '') result = result.filter(j => j.areaSize >= Number(sizeMin));
+    if (sizeMax !== '') result = result.filter(j => j.areaSize <= Number(sizeMax));
+
+    // Filter by Date
+    if (dateFilter) {
+        result = result.filter(j => {
+            // Check main date or workDates array
+            if (j.date === dateFilter) return true;
+            if (j.workDates && j.workDates.includes(dateFilter)) return true;
+            return false;
+        });
+    }
+
+    // Sort
+    result.sort((a, b) => {
+        let comparison = 0;
+        switch (sortBy) {
+            case 'price':
+                comparison = a.price - b.price;
+                break;
+            case 'size':
+                comparison = a.areaSize - b.areaSize;
+                break;
+            case 'date':
+            default:
+                comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+                break;
+        }
+        return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [jobs, searchTerm, priceMin, priceMax, sizeMin, sizeMax, dateFilter, sortBy, sortOrder]);
+
+  const clearFilters = () => {
+      setSearchTerm('');
+      setPriceMin('');
+      setPriceMax('');
+      setSizeMin('');
+      setSizeMax('');
+      setDateFilter('');
+      setSortBy('date');
+      setSortOrder('asc');
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -1088,37 +1200,114 @@ const MaidDashboard: React.FC<{
       </div>
 
       {activeTab === 'find' ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-           {availableJobs.map(job => {
-               const applied = myApps.some(a => a.jobId === job.id);
-               return (
-                   <div key={job.id} className="bg-white shadow rounded-lg p-6 flex flex-col justify-between">
-                       <div>
-                           <div className="flex justify-between items-start">
-                               <h3 className="text-lg font-bold text-gray-900">{job.title}</h3>
-                               <span className="bg-teal-50 text-teal-700 text-xs px-2 py-1 rounded-full">New</span>
-                           </div>
-                           <p className="text-sm text-gray-500 mt-1 flex items-center"><IconMapPin className="w-4 h-4 mr-1"/> {job.location}</p>
-                           <p className="mt-4 text-sm text-gray-600 line-clamp-3">{job.description}</p>
-                           <div className="mt-4 flex items-center justify-between">
-                               <span className="text-lg font-bold text-teal-600">R{job.price}</span>
-                               <span className="text-xs text-gray-500">{job.paymentType}</span>
-                           </div>
-                           <div className="mt-2 text-xs text-gray-500">
-                               <p>{job.rooms} Bed • {job.bathrooms} Bath • {job.areaSize}m²</p>
-                           </div>
-                       </div>
-                       <div className="mt-6">
-                           {applied ? (
-                               <button disabled className="w-full bg-gray-100 text-gray-400 py-2 rounded-lg cursor-not-allowed">Applied</button>
-                           ) : (
-                               <button onClick={() => onApply(job.id, "I'm interested!")} className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition-colors">Apply Now</button>
-                           )}
-                       </div>
-                   </div>
-               )
-           })}
-           {availableJobs.length === 0 && <p className="text-gray-500 col-span-3 text-center py-10">No jobs available right now.</p>}
+        <div className="space-y-6">
+            {/* Search and Filter Bar */}
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <div className="flex gap-4">
+                    <div className="flex-1 relative">
+                        <IconMapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input 
+                            type="text" 
+                            placeholder="Search by location..." 
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none bg-white text-gray-900"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <button 
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={`px-4 py-2 rounded-lg border flex items-center gap-2 transition-colors ${showFilters ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    >
+                        <IconFilter className="w-5 h-5" />
+                        <span className="hidden sm:inline">Filters</span>
+                    </button>
+                </div>
+
+                {/* Expanded Filters */}
+                {showFilters && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-down">
+                        {/* Price Range */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Price (R)</label>
+                            <div className="flex gap-2">
+                                <input type="number" placeholder="Min" className="w-full p-2 border rounded text-sm bg-white text-gray-900" value={priceMin} onChange={e => setPriceMin(e.target.value === '' ? '' : Number(e.target.value))} />
+                                <input type="number" placeholder="Max" className="w-full p-2 border rounded text-sm bg-white text-gray-900" value={priceMax} onChange={e => setPriceMax(e.target.value === '' ? '' : Number(e.target.value))} />
+                            </div>
+                        </div>
+                        {/* Size Range */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Size (m²)</label>
+                            <div className="flex gap-2">
+                                <input type="number" placeholder="Min" className="w-full p-2 border rounded text-sm bg-white text-gray-900" value={sizeMin} onChange={e => setSizeMin(e.target.value === '' ? '' : Number(e.target.value))} />
+                                <input type="number" placeholder="Max" className="w-full p-2 border rounded text-sm bg-white text-gray-900" value={sizeMax} onChange={e => setSizeMax(e.target.value === '' ? '' : Number(e.target.value))} />
+                            </div>
+                        </div>
+                        {/* Date */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+                            <input type="date" className="w-full p-2 border rounded text-sm bg-white text-gray-900" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+                        </div>
+                        
+                        {/* Sort */}
+                        <div className="md:col-span-3 flex justify-between items-center mt-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-600">Sort by:</span>
+                                <select 
+                                    value={sortBy} 
+                                    onChange={(e) => setSortBy(e.target.value as any)}
+                                    className="p-1 border rounded text-sm bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                >
+                                    <option value="date">Date</option>
+                                    <option value="price">Price</option>
+                                    <option value="size">Size</option>
+                                </select>
+                                <button 
+                                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                                    className="p-1.5 border rounded hover:bg-gray-50 bg-white text-gray-700"
+                                    title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                                >
+                                    {sortOrder === 'asc' ? '↑' : '↓'}
+                                </button>
+                            </div>
+                            <button onClick={clearFilters} className="text-sm text-red-500 hover:text-red-700 font-medium">Clear All Filters</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredJobs.map(job => {
+                const applied = myApps.some(a => a.jobId === job.id);
+                return (
+                    <div key={job.id} className="bg-white shadow rounded-lg p-6 flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div>
+                            <div className="flex justify-between items-start">
+                                <h3 className="text-lg font-bold text-gray-900">{job.title}</h3>
+                                <span className="bg-teal-50 text-teal-700 text-xs px-2 py-1 rounded-full">New</span>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1 flex items-center"><IconMapPin className="w-4 h-4 mr-1"/> {job.location}</p>
+                            <p className="mt-4 text-sm text-gray-600 line-clamp-3">{job.description}</p>
+                            <div className="mt-4 flex items-center justify-between">
+                                <span className="text-lg font-bold text-teal-600">R{job.price}</span>
+                                <span className="text-xs text-gray-500">{job.paymentType}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-gray-500">
+                                <p>{job.rooms} Bed • {job.bathrooms} Bath • {job.areaSize}m²</p>
+                                <p className="mt-1 flex items-center"><IconCalendar className="w-3 h-3 mr-1"/> {new Date(job.date).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                        <div className="mt-6">
+                            {applied ? (
+                                <button disabled className="w-full bg-gray-100 text-gray-400 py-2 rounded-lg cursor-not-allowed">Applied</button>
+                            ) : (
+                                <button onClick={() => onApply(job.id, "I'm interested!")} className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition-colors">Apply Now</button>
+                            )}
+                        </div>
+                    </div>
+                )
+            })}
+            {filteredJobs.length === 0 && <p className="text-gray-500 col-span-3 text-center py-10">No jobs found matching your criteria.</p>}
+            </div>
         </div>
       ) : (
         <div className="bg-white shadow rounded-lg overflow-hidden">
