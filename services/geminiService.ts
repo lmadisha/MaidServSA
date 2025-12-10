@@ -1,7 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateJobDescription = async (
   rooms: number,
@@ -10,7 +9,7 @@ export const generateJobDescription = async (
   location: string,
   requirements: string
 ): Promise<string> => {
-  if (!apiKey) return "API Key missing. Please provide a description manually.";
+  if (!process.env.API_KEY) return "API Key missing. Please provide a description manually.";
 
   try {
     const prompt = `
@@ -41,7 +40,7 @@ export const analyzeCandidateMatch = async (
   jobDescription: string,
   candidateBio: string
 ): Promise<string> => {
-  if (!apiKey) return "Match analysis unavailable.";
+  if (!process.env.API_KEY) return "Match analysis unavailable.";
 
   try {
     const prompt = `

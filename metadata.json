@@ -1,8 +1,5 @@
 {
   "name": "MaidServSA",
   "description": "A premium marketplace connecting clients with professional cleaning services. Features smart job matching, direct messaging, and secure booking management.",
-  "requestFramePermissions": [
-    "geolocation",
-    "clipboard-read"
-  ]
+  "requestFramePermissions": []
 }
