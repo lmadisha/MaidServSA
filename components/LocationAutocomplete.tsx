@@ -53,6 +53,14 @@ export const LocationAutocomplete: React.FC<Props> = ({ value, onChange, placeho
     setShow(false);
   };
 
+  const handleFocus = () => {
+    if (value.length > 0) {
+      const filtered = SA_LOCATIONS.filter(loc => loc.toLowerCase().includes(value.toLowerCase()));
+      setSuggestions(filtered);
+      setShow(true);
+    }
+  }
+
   return (
     <div className="relative w-full" ref={wrapperRef}>
       <input
@@ -62,19 +70,20 @@ export const LocationAutocomplete: React.FC<Props> = ({ value, onChange, placeho
         placeholder={placeholder}
         value={value}
         onChange={handleInput}
+        onFocus={handleFocus}
         required={required}
         autoComplete="off"
       />
       {show && suggestions.length > 0 && (
-        <ul className="absolute z-50 w-full bg-white border border-gray-300 mt-1 rounded-md shadow-lg max-h-60 overflow-auto">
+        <ul className="absolute z-50 w-full bg-white border border-gray-200 mt-1.5 rounded-lg shadow-xl max-h-60 overflow-auto ring-1 ring-black ring-opacity-5 focus:outline-none transform transition-all ease-out duration-100 origin-top">
           {suggestions.map((loc) => (
             <li
               key={loc}
-              className="px-4 py-2 hover:bg-teal-50 cursor-pointer text-sm text-gray-700 flex items-center"
+              className="px-4 py-3 hover:bg-teal-50 cursor-pointer text-sm text-gray-700 flex items-center transition-colors duration-150 border-b border-gray-50 last:border-0"
               onClick={() => handleSelect(loc)}
             >
-              <IconMapPin className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
-              <span className="truncate">{loc}</span>
+              <IconMapPin className="w-4 h-4 mr-3 text-teal-500 flex-shrink-0 opacity-75" />
+              <span className="truncate font-medium">{loc}</span>
             </li>
           ))}
         </ul>

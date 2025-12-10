@@ -3,7 +3,7 @@ import { HashRouter, Routes, Route, Link, useLocation, useNavigate, useParams, N
 import { User, UserRole, Job, JobStatus, Application, ApplicationStatus, Message, Review, Notification, PaymentType, JobHistoryEntry, ExperienceAnswer } from './types';
 import { generateJobDescription, analyzeCandidateMatch } from './services/geminiService';
 import { db } from './services/db';
-import { IconCalendar, IconCheckCircle, IconHome, IconMapPin, IconMessageSquare, IconSparkles, IconUser, IconXCircle, IconSend, IconStar, IconBell, IconChevronLeft, IconChevronRight, IconClock, IconLock, IconMail, IconLogOut, IconInfo, IconAlertTriangle, IconAlertCircle, IconFileText, IconEdit, IconTrash, IconFilter } from './components/Icons';
+import { IconCalendar, IconCheckCircle, IconHome, IconMapPin, IconMessageSquare, IconSparkles, IconUser, IconXCircle, IconSend, IconStar, IconBell, IconChevronLeft, IconChevronRight, IconChevronDown, IconClock, IconLock, IconMail, IconLogOut, IconInfo, IconAlertTriangle, IconAlertCircle, IconFileText, IconEdit, IconTrash, IconFilter } from './components/Icons';
 import { LocationAutocomplete } from './components/LocationAutocomplete';
 
 // --- DATA CONSTANTS ---
@@ -34,7 +34,43 @@ const RESIDENCY_STATUSES = [
   "Other"
 ];
 
+// Reusable Styles
+const INPUT_CLASS = "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm px-4 py-2.5 bg-white text-gray-900 placeholder-gray-400 transition-colors duration-200 border";
+const LABEL_CLASS = "block text-sm font-medium text-gray-700 mb-1";
+
 // --- COMPONENTS ---
+
+const FormSelect: React.FC<{
+  label?: string;
+  value: string | number;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  options: { value: string | number; label: string }[];
+  name?: string;
+  required?: boolean;
+  className?: string;
+}> = ({ label, value, onChange, options, name, required, className }) => (
+  <div className={className}>
+    {label && <label className={LABEL_CLASS}>{label}</label>}
+    <div className="relative">
+      <select
+        name={name}
+        required={required}
+        value={value}
+        onChange={onChange}
+        className={`${INPUT_CLASS} appearance-none pr-10 cursor-pointer`}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+        <IconChevronDown className="h-4 w-4" />
+      </div>
+    </div>
+  </div>
+);
 
 const Navbar: React.FC<{ 
   currentUser: User | null; 
@@ -269,70 +305,66 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
             <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Personal Information</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700">First Name</label>
-                <input type="text" name="firstName" value={formData.firstName || ''} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900" />
+                <label className={LABEL_CLASS}>First Name</label>
+                <input type="text" name="firstName" value={formData.firstName || ''} onChange={handleChange} className={INPUT_CLASS} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Middle Name</label>
-                <input type="text" name="middleName" value={formData.middleName || ''} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900" />
+                <label className={LABEL_CLASS}>Middle Name</label>
+                <input type="text" name="middleName" value={formData.middleName || ''} onChange={handleChange} className={INPUT_CLASS} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Surname</label>
-                <input type="text" name="surname" value={formData.surname || ''} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900" />
+                <label className={LABEL_CLASS}>Surname</label>
+                <input type="text" name="surname" value={formData.surname || ''} onChange={handleChange} className={INPUT_CLASS} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
-                <input type="date" name="dateOfBirth" value={formData.dateOfBirth || ''} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900" />
+                <label className={LABEL_CLASS}>Date of Birth</label>
+                <input type="date" name="dateOfBirth" value={formData.dateOfBirth || ''} onChange={handleChange} className={INPUT_CLASS} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Place of Birth</label>
+                <label className={LABEL_CLASS}>Place of Birth</label>
                 <LocationAutocomplete 
                   name="placeOfBirth" 
                   value={formData.placeOfBirth || ''} 
                   onChange={(val) => setFormData(prev => ({ ...prev, placeOfBirth: val }))} 
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900" 
+                  className={INPUT_CLASS} 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Nationality</label>
-                <select
+                <FormSelect
+                  label="Nationality"
                   name="nationality"
                   value={formData.nationality || ''}
                   onChange={handleChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900"
-                >
-                  <option value="">Select Nationality</option>
-                  {NATIONALITIES.map((nat) => (
-                    <option key={nat} value={nat}>{nat}</option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: 'Select Nationality' },
+                    ...NATIONALITIES.map(nat => ({ value: nat, label: nat }))
+                  ]}
+                />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Residency / Visa Status</label>
-                <select
-                  name="residencyStatus"
-                  value={formData.residencyStatus || ''}
-                  onChange={handleChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900"
-                >
-                  <option value="">Select Status</option>
-                  {RESIDENCY_STATUSES.map((status) => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
+                 <FormSelect
+                    label="Residency / Visa Status"
+                    name="residencyStatus"
+                    value={formData.residencyStatus || ''}
+                    onChange={handleChange}
+                    options={[
+                      { value: '', label: 'Select Status' },
+                      ...RESIDENCY_STATUSES.map(s => ({ value: s, label: s }))
+                    ]}
+                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Residential Address</label>
+                <label className={LABEL_CLASS}>Residential Address</label>
                 <LocationAutocomplete 
                   name="address" 
                   value={formData.address || ''} 
                   onChange={(val) => setFormData(prev => ({ ...prev, address: val }))} 
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900" 
+                  className={INPUT_CLASS} 
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Bio</label>
-                <textarea rows={3} name="bio" value={formData.bio || ''} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900" placeholder="Tell us a bit about yourself..." />
+                <label className={LABEL_CLASS}>Bio</label>
+                <textarea rows={3} name="bio" value={formData.bio || ''} onChange={handleChange} className={INPUT_CLASS} placeholder="Tell us a bit about yourself..." />
               </div>
             </div>
           </div>
@@ -345,10 +377,10 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
                 <div className="space-y-4">
                   {MAID_EXPERIENCE_QUESTIONS.map((q) => (
                     <div key={q.id}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{q.text}</label>
+                      <label className={`${LABEL_CLASS} mb-1`}>{q.text}</label>
                       <input 
                         type="text" 
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2 bg-white text-gray-900"
+                        className={INPUT_CLASS}
                         value={answers[q.id] || ''}
                         onChange={(e) => handleAnswerChange(q.id, e.target.value)}
                       />
@@ -402,34 +434,111 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
   );
 };
 
-const CalendarInput: React.FC<{
+const FullCalendarSelector: React.FC<{
   selectedDates: string[];
   onChange: (dates: string[]) => void;
 }> = ({ selectedDates, onChange }) => {
-  const handleAddDate = () => {
-    onChange([...selectedDates, new Date().toISOString().split('T')[0]]);
+  const [viewDate, setViewDate] = useState(new Date());
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragMode, setDragMode] = useState<'add' | 'remove'>('add');
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  const getFirstDay = (y: number, m: number) => new Date(y, m, 1).getDay();
+
+  const daysCount = getDaysInMonth(year, month);
+  const startDay = getFirstDay(year, month); // 0 = Sunday
+
+  const handleMouseDown = (dateStr: string) => {
+    setIsDragging(true);
+    const isSelected = selectedDates.includes(dateStr);
+    const mode = isSelected ? 'remove' : 'add';
+    setDragMode(mode);
+    updateDate(dateStr, mode);
   };
 
-  const handleDateChange = (index: number, val: string) => {
-    const newDates = [...selectedDates];
-    newDates[index] = val;
+  const handleMouseEnter = (dateStr: string) => {
+    if (isDragging) {
+      updateDate(dateStr, dragMode);
+    }
+  };
+
+  const updateDate = (dateStr: string, mode: 'add' | 'remove') => {
+    let newDates = [...selectedDates];
+    if (mode === 'add') {
+      if (!newDates.includes(dateStr)) newDates.push(dateStr);
+    } else {
+      newDates = newDates.filter(d => d !== dateStr);
+    }
     onChange(newDates);
   };
 
-  const handleRemoveDate = (index: number) => {
-    const newDates = selectedDates.filter((_, i) => i !== index);
-    onChange(newDates);
+  useEffect(() => {
+    const handleUp = () => setIsDragging(false);
+    window.addEventListener('mouseup', handleUp);
+    return () => window.removeEventListener('mouseup', handleUp);
+  }, []);
+
+  const changeMonth = (delta: number) => {
+    setViewDate(new Date(year, month + delta, 1));
+  };
+
+  const renderDays = () => {
+    const days = [];
+    const emptySlots = startDay; // Depends on locale, assuming Sun=0
+
+    // Empty slots
+    for (let i = 0; i < emptySlots; i++) {
+      days.push(<div key={`empty-${i}`} className="h-10 md:h-14"></div>);
+    }
+
+    // Days
+    for (let i = 1; i <= daysCount; i++) {
+      // Manually construct YYYY-MM-DD to avoid timezone issues
+      const currentMonth = month + 1;
+      const dateStr = `${year}-${String(currentMonth).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const isSelected = selectedDates.includes(dateStr);
+      const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+      days.push(
+        <div
+          key={dateStr}
+          onMouseDown={() => handleMouseDown(dateStr)}
+          onMouseEnter={() => handleMouseEnter(dateStr)}
+          className={`
+            h-10 md:h-14 border border-gray-100 flex items-center justify-center cursor-pointer select-none transition-all duration-100
+            ${isSelected ? 'bg-teal-600 text-white font-semibold shadow-inner' : 'hover:bg-teal-50 text-gray-700 bg-white'}
+            ${isToday && !isSelected ? 'ring-2 ring-teal-400 ring-inset' : ''}
+          `}
+        >
+          {i}
+        </div>
+      );
+    }
+    return days;
   };
 
   return (
-    <div className="space-y-2">
-      {selectedDates.map((date, index) => (
-        <div key={index} className="flex gap-2">
-           <input type="date" value={date} onChange={(e) => handleDateChange(index, e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm border p-2" />
-           <button type="button" onClick={() => handleRemoveDate(index)} className="text-red-500 hover:text-red-700"><IconTrash className="w-5 h-5"/></button>
-        </div>
-      ))}
-      <button type="button" onClick={handleAddDate} className="text-sm text-teal-600 hover:text-teal-800 font-medium">+ Add Date</button>
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm select-none">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <button type="button" onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-200 rounded-full transition-colors"><IconChevronLeft className="w-5 h-5 text-gray-600"/></button>
+        <span className="font-semibold text-gray-900">{viewDate.toLocaleDateString('default', { month: 'long', year: 'numeric' })}</span>
+        <button type="button" onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-200 rounded-full transition-colors"><IconChevronRight className="w-5 h-5 text-gray-600"/></button>
+      </div>
+      <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+          <div key={d} className="py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 bg-white">
+        {renderDays()}
+      </div>
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 flex justify-between items-center">
+         <span>{selectedDates.length} days selected</span>
+         <span className="italic">Click & drag to select</span>
+      </div>
     </div>
   );
 };
@@ -441,7 +550,6 @@ const JobModal: React.FC<{
   initialJob?: Job;
   clientId: string;
 }> = ({ isOpen, onClose, onSave, initialJob, clientId }) => {
-  const [step, setStep] = useState(1);
   const [jobData, setJobData] = useState<Partial<Job>>(initialJob || {
     title: '', description: '', location: '', price: 0, paymentType: PaymentType.FIXED,
     rooms: 1, bathrooms: 1, areaSize: 50, startTime: '09:00', endTime: '17:00', duration: 8, workDates: []
@@ -484,89 +592,146 @@ const JobModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={onClose}><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div>
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <form onSubmit={handleSubmit} className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">{initialJob ? 'Edit Job' : 'Post a New Job'}</h3>
-            
-            <div className="space-y-4">
-              {/* Basic Info */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Job Title</label>
-                <input type="text" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-teal-500 focus:border-teal-500 sm:text-sm" value={jobData.title} onChange={e => setJobData({...jobData, title: e.target.value})} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Rooms</label>
-                  <input type="number" min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 sm:text-sm" value={jobData.rooms} onChange={e => setJobData({...jobData, rooms: parseInt(e.target.value)})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Bathrooms</label>
-                  <input type="number" min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 sm:text-sm" value={jobData.bathrooms} onChange={e => setJobData({...jobData, bathrooms: parseInt(e.target.value)})} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Area (sqm)</label>
-                  <input type="number" min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 sm:text-sm" value={jobData.areaSize} onChange={e => setJobData({...jobData, areaSize: parseInt(e.target.value)})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Location</label>
-                  <LocationAutocomplete 
-                    required 
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-teal-500 focus:border-teal-500 sm:text-sm" 
-                    value={jobData.location || ''} 
-                    onChange={(val) => setJobData({...jobData, location: val})} 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                   <label className="block text-sm font-medium text-gray-700">Description</label>
-                   <button type="button" onClick={handleGenerateDescription} disabled={generating} className="text-xs text-teal-600 hover:text-teal-800 flex items-center">
-                     {generating ? 'Generating...' : <><IconSparkles className="w-3 h-3 mr-1"/> AI Generate</>}
-                   </button>
-                </div>
-                <textarea rows={3} required className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-teal-500 focus:border-teal-500 sm:text-sm" value={jobData.description} onChange={e => setJobData({...jobData, description: e.target.value})} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-sm font-medium text-gray-700">Payment Type</label>
-                    <select className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 sm:text-sm" value={jobData.paymentType} onChange={e => setJobData({...jobData, paymentType: e.target.value as PaymentType})}>
-                       <option value={PaymentType.FIXED}>Fixed Price</option>
-                       <option value={PaymentType.HOURLY}>Hourly Rate</option>
-                    </select>
-                 </div>
-                 <div>
-                    <label className="block text-sm font-medium text-gray-700">Price (R)</label>
-                    <input type="number" min="0" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 sm:text-sm" value={jobData.price} onChange={e => setJobData({...jobData, price: parseInt(e.target.value)})} />
-                 </div>
-              </div>
-
-              {/* Dates */}
-              <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Dates</label>
-                 <CalendarInput 
-                    selectedDates={jobData.workDates || []} 
-                    onChange={(dates) => setJobData({...jobData, workDates: dates})} 
-                 />
-                 <p className="text-xs text-gray-500 mt-1">{jobData.workDates?.length} days selected</p>
-              </div>
-
-            </div>
-
-            <div className="mt-5 sm:mt-6 flex gap-2">
-               <button type="button" onClick={onClose} className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:text-sm">Cancel</button>
-               <button type="submit" className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:text-sm">Save Job</button>
-            </div>
-          </form>
+    <div className="fixed inset-0 z-50 bg-white overflow-hidden flex flex-col animate-fade-in-up">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white z-10 shadow-sm">
+        <div>
+           <h2 className="text-xl font-bold text-gray-900">{initialJob ? 'Edit Job Posting' : 'Create New Job Posting'}</h2>
+           <p className="text-sm text-gray-500">Provide details about your cleaning requirements.</p>
         </div>
+        <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
+           <IconXCircle className="w-8 h-8" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="max-w-7xl mx-auto p-6 md:p-8">
+           <form onSubmit={handleSubmit} id="jobForm" className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+              
+              {/* Left Column: Job Details */}
+              <div className="space-y-6">
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center"><IconHome className="w-5 h-5 mr-2 text-teal-600"/> Job Details</h3>
+                    <div className="space-y-4">
+                       <div>
+                          <label className={LABEL_CLASS}>Job Title</label>
+                          <input type="text" required className={INPUT_CLASS} placeholder="e.g. Weekly Home Cleaning" value={jobData.title} onChange={e => setJobData({...jobData, title: e.target.value})} />
+                       </div>
+                       <div>
+                          <label className={LABEL_CLASS}>Location</label>
+                          <LocationAutocomplete 
+                             required 
+                             className={INPUT_CLASS} 
+                             value={jobData.location || ''} 
+                             onChange={(val) => setJobData({...jobData, location: val})} 
+                             placeholder="Search your area..."
+                          />
+                       </div>
+                       <div className="grid grid-cols-3 gap-4">
+                          <div>
+                             <label className={LABEL_CLASS}>Rooms</label>
+                             <input type="number" min="0" className={INPUT_CLASS} value={jobData.rooms} onChange={e => setJobData({...jobData, rooms: parseInt(e.target.value)})} />
+                          </div>
+                          <div>
+                             <label className={LABEL_CLASS}>Bathrooms</label>
+                             <input type="number" min="0" className={INPUT_CLASS} value={jobData.bathrooms} onChange={e => setJobData({...jobData, bathrooms: parseInt(e.target.value)})} />
+                          </div>
+                          <div>
+                             <label className={LABEL_CLASS}>Area (sqm)</label>
+                             <input type="number" min="0" className={INPUT_CLASS} value={jobData.areaSize} onChange={e => setJobData({...jobData, areaSize: parseInt(e.target.value)})} />
+                          </div>
+                       </div>
+                       <div>
+                          <div className="flex justify-between items-center mb-1">
+                             <label className={LABEL_CLASS}>Description & Requirements</label>
+                             <button type="button" onClick={handleGenerateDescription} disabled={generating} className="text-xs text-teal-600 hover:text-teal-800 flex items-center font-medium bg-teal-50 px-2 py-1 rounded-full transition-colors hover:bg-teal-100">
+                               {generating ? 'Generating...' : <><IconSparkles className="w-3 h-3 mr-1"/> AI Generate</>}
+                             </button>
+                          </div>
+                          <textarea rows={4} required className={INPUT_CLASS} value={jobData.description} onChange={e => setJobData({...jobData, description: e.target.value})} placeholder="Describe specific tasks, preferred products, etc." />
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center"><IconFileText className="w-5 h-5 mr-2 text-teal-600"/> Payment & Rates</h3>
+                    <div className="grid grid-cols-2 gap-6">
+                       <FormSelect
+                          label="Payment Type"
+                          value={jobData.paymentType || PaymentType.FIXED}
+                          onChange={e => setJobData({...jobData, paymentType: e.target.value as PaymentType})}
+                          options={[
+                            { value: PaymentType.FIXED, label: 'Fixed Price (Total)' },
+                            { value: PaymentType.HOURLY, label: 'Hourly Rate' }
+                          ]}
+                       />
+                       <div>
+                          <label className={LABEL_CLASS}>Price (R)</label>
+                          <div className="relative rounded-md shadow-sm">
+                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                <span className="text-gray-500 sm:text-sm">R</span>
+                             </div>
+                             <input type="number" min="0" required className={`${INPUT_CLASS} pl-7`} value={jobData.price} onChange={e => setJobData({...jobData, price: parseInt(e.target.value)})} />
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Right Column: Schedule */}
+              <div className="space-y-6">
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-full">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center"><IconCalendar className="w-5 h-5 mr-2 text-teal-600"/> Schedule</h3>
+                    <div className="space-y-6">
+                       <div className="grid grid-cols-2 gap-4">
+                          <div>
+                             <label className={LABEL_CLASS}>Start Time</label>
+                             <input type="time" className={INPUT_CLASS} value={jobData.startTime} onChange={e => setJobData({...jobData, startTime: e.target.value})} />
+                          </div>
+                          <div>
+                             <label className={LABEL_CLASS}>End Time</label>
+                             <input type="time" className={INPUT_CLASS} value={jobData.endTime} onChange={e => setJobData({...jobData, endTime: e.target.value})} />
+                          </div>
+                       </div>
+                       
+                       <div>
+                          <label className={LABEL_CLASS}>Select Dates</label>
+                          <p className="text-xs text-gray-500 mb-3">Click on dates to select. Click and drag to select multiple consecutive days.</p>
+                          <FullCalendarSelector 
+                             selectedDates={jobData.workDates || []} 
+                             onChange={(dates) => setJobData({...jobData, workDates: dates})} 
+                          />
+                       </div>
+                       
+                       {jobData.workDates && jobData.workDates.length > 0 && (
+                          <div className="bg-teal-50 border border-teal-100 rounded-lg p-4">
+                             <h4 className="text-sm font-semibold text-teal-800 mb-2">Summary</h4>
+                             <p className="text-sm text-teal-700">
+                                Total Days: <span className="font-bold">{jobData.workDates.length}</span>
+                             </p>
+                             <p className="text-sm text-teal-700">
+                                Estimated Total: <span className="font-bold">R{jobData.paymentType === PaymentType.FIXED ? (jobData.price || 0) * 1 : (jobData.price || 0) * (jobData.duration || 8) * jobData.workDates.length}</span>
+                                {jobData.paymentType === PaymentType.HOURLY && <span className="text-xs font-normal"> (approx based on 8h/day)</span>}
+                             </p>
+                          </div>
+                       )}
+                    </div>
+                 </div>
+              </div>
+
+           </form>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10">
+         <button type="button" onClick={onClose} className="px-6 py-2.5 bg-white text-gray-700 font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+            Cancel
+         </button>
+         <button type="submit" form="jobForm" className="px-8 py-2.5 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center">
+            {initialJob ? 'Save Changes' : 'Post Job Now'} <IconChevronRight className="ml-2 w-4 h-4"/>
+         </button>
       </div>
     </div>
   );
@@ -645,9 +810,9 @@ const MaidDashboard: React.FC<{
       {activeTab === 'find' && (
          <div>
             <div className="mb-6 relative">
-               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10 mt-2"><IconFilter className="h-5 w-5 text-gray-400"/></div>
+               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10 mt-2.5"><IconFilter className="h-5 w-5 text-gray-400"/></div>
                <LocationAutocomplete 
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-teal-500 focus:border-teal-500 sm:text-sm" 
+                  className={INPUT_CLASS + " pl-10"} 
                   placeholder="Search by location or keywords..." 
                   value={filterLocation} 
                   onChange={setFilterLocation} 
@@ -806,7 +971,7 @@ const RatingModal: React.FC<{
                   ))}
                </div>
                <textarea 
-                 className="w-full border border-gray-300 rounded-md p-2" 
+                 className={INPUT_CLASS} 
                  rows={3} 
                  placeholder="Share your experience..." 
                  value={comment} 
@@ -892,6 +1057,11 @@ const ClientDashboard: React.FC<{
              const applicants = getJobApplicants(job.id);
              const maid = users.find(u => u.id === job.assignedMaidId);
              
+             // Get all applications for this job for history
+             const allApplications = applications
+                .filter(a => a.jobId === job.id)
+                .sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+
              return (
                <div key={job.id} className="bg-white shadow rounded-lg overflow-hidden border border-gray-100">
                   <div className="px-4 py-5 sm:px-6 flex justify-between items-start bg-gray-50">
@@ -974,6 +1144,47 @@ const ClientDashboard: React.FC<{
                                 <button onClick={() => openRate(job)} className="text-sm text-teal-600 hover:underline">Rate Service</button>
                             )}
                          </div>
+                     )}
+
+                     {/* Job Application History */}
+                     {allApplications.length > 0 && (
+                        <div className="mt-6 border-t border-gray-100 pt-4">
+                           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Job Application History</h4>
+                           <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                 <thead className="bg-gray-50">
+                                    <tr>
+                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applicant ID</th>
+                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied At</th>
+                                    </tr>
+                                 </thead>
+                                 <tbody className="bg-white divide-y divide-gray-200">
+                                    {allApplications.map(app => {
+                                       const applicant = users.find(u => u.id === app.maidId);
+                                       return (
+                                          <tr key={app.id}>
+                                             <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-mono">{app.maidId}</td>
+                                             <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">{applicant ? applicant.name : 'Unknown'}</td>
+                                             <td className="px-3 py-2 whitespace-nowrap">
+                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                   app.status === ApplicationStatus.ACCEPTED ? 'bg-green-100 text-green-800' :
+                                                   app.status === ApplicationStatus.REJECTED ? 'bg-red-100 text-red-800' :
+                                                   app.status === ApplicationStatus.PENDING ? 'bg-yellow-100 text-yellow-800' :
+                                                   'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                   {app.status}
+                                                </span>
+                                             </td>
+                                             <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">{new Date(app.appliedAt).toLocaleString()}</td>
+                                          </tr>
+                                       );
+                                    })}
+                                 </tbody>
+                              </table>
+                           </div>
+                        </div>
                      )}
                   </div>
                </div>
@@ -1214,43 +1425,43 @@ const AuthPage: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
                     <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">{isLogin ? 'Sign in to your account' : 'Create a new account'}</h2>
                 </div>
                 <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                    <div className="rounded-md shadow-sm -space-y-px">
+                    <div className="space-y-4">
                         {!isLogin && (
                            <>
                             <div>
-                                <label className="sr-only">Full Name</label>
-                                <input type="text" required className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-t-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} />
+                                <label className={LABEL_CLASS}>Full Name</label>
+                                <input type="text" required className={INPUT_CLASS} placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} />
                             </div>
-                            <div className="p-2 bg-white border border-gray-300 flex justify-around">
-                                <label className="flex items-center space-x-2">
-                                    <input type="radio" checked={role === UserRole.CLIENT} onChange={() => setRole(UserRole.CLIENT)} className="text-teal-600 focus:ring-teal-500" />
+                            <div className="p-2.5 bg-white border border-gray-300 rounded-md flex justify-around shadow-sm">
+                                <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input type="radio" checked={role === UserRole.CLIENT} onChange={() => setRole(UserRole.CLIENT)} className="text-teal-600 focus:ring-teal-500 h-4 w-4 border-gray-300" />
                                     <span className="text-sm text-gray-700">I need a Maid</span>
                                 </label>
-                                <label className="flex items-center space-x-2">
-                                    <input type="radio" checked={role === UserRole.MAID} onChange={() => setRole(UserRole.MAID)} className="text-teal-600 focus:ring-teal-500" />
+                                <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input type="radio" checked={role === UserRole.MAID} onChange={() => setRole(UserRole.MAID)} className="text-teal-600 focus:ring-teal-500 h-4 w-4 border-gray-300" />
                                     <span className="text-sm text-gray-700">I am a Maid</span>
                                 </label>
                             </div>
                            </>
                         )}
                         <div>
-                            <label className="sr-only">Email address</label>
-                            <input type="email" required className={`appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white ${isLogin ? 'rounded-t-md' : ''} focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm`} placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
+                            <label className={LABEL_CLASS}>Email address</label>
+                            <input type="email" required className={INPUT_CLASS} placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
                         </div>
                         <div>
-                            <label className="sr-only">Password</label>
-                            <input type="password" required className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white rounded-b-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+                            <label className={LABEL_CLASS}>Password</label>
+                            <input type="password" required className={INPUT_CLASS} placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
                         </div>
                     </div>
 
                     <div>
-                        <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                        <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 shadow-sm transition-colors">
                             {isLogin ? 'Sign in' : 'Sign up'}
                         </button>
                     </div>
                 </form>
                 <div className="text-center">
-                    <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-teal-600 hover:text-teal-500">
+                    <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-teal-600 hover:text-teal-500 font-medium">
                         {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
                     </button>
                 </div>
