@@ -1,5 +1,138 @@
 import { User, Job, Application, Message, Review, Notification, UserRole, JobStatus, PaymentType, ApplicationStatus } from '../types';
 
+// PostgreSQL schema to move the current in-memory/localStorage data model into a real database
+// The database runs on localhost:5432 with user/password postgres/postgres
+export const POSTGRES_SCHEMA_QUERIES: string[] = [
+  // Extensions & enums
+  `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`,
+  `CREATE TYPE user_role AS ENUM ('CLIENT', 'MAID', 'ADMIN');`,
+  `CREATE TYPE job_status AS ENUM ('OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');`,
+  `CREATE TYPE payment_type AS ENUM ('FIXED', 'HOURLY');`,
+  `CREATE TYPE application_status AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED');`,
+
+  // Users
+  `CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    role user_role NOT NULL,
+    avatar TEXT,
+    rating NUMERIC(3,2) DEFAULT 0,
+    rating_count INTEGER DEFAULT 0,
+    bio TEXT,
+    location TEXT,
+    is_suspended BOOLEAN DEFAULT FALSE,
+    first_name TEXT,
+    middle_name TEXT,
+    surname TEXT,
+    date_of_birth DATE,
+    address TEXT,
+    place_of_birth TEXT,
+    nationality TEXT,
+    residency_status TEXT,
+    languages TEXT,
+    education_level TEXT,
+    marital_status TEXT,
+    school TEXT,
+    cv_file_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Jobs
+  `CREATE TABLE IF NOT EXISTS jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    client_id UUID REFERENCES users(id),
+    title TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    area_size INTEGER,
+    price NUMERIC(10,2),
+    currency TEXT DEFAULT 'R',
+    date DATE,
+    status job_status NOT NULL DEFAULT 'OPEN',
+    rooms SMALLINT,
+    bathrooms SMALLINT,
+    images TEXT[],
+    payment_type payment_type NOT NULL,
+    start_time TIME,
+    end_time TIME,
+    duration NUMERIC(5,2),
+    work_dates DATE[],
+    assigned_maid_id UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Job history
+  `CREATE TABLE IF NOT EXISTS job_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    status job_status NOT NULL,
+    note TEXT,
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Applications
+  `CREATE TABLE IF NOT EXISTS applications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    maid_id UUID REFERENCES users(id),
+    status application_status NOT NULL DEFAULT 'PENDING',
+    message TEXT,
+    applied_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Messages
+  `CREATE TABLE IF NOT EXISTS messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES users(id),
+    receiver_id UUID REFERENCES users(id),
+    content TEXT NOT NULL,
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Reviews
+  `CREATE TABLE IF NOT EXISTS reviews (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    reviewer_id UUID REFERENCES users(id),
+    reviewee_id UUID REFERENCES users(id),
+    rating SMALLINT CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Notifications
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id),
+    message TEXT NOT NULL,
+    type TEXT CHECK (type IN ('info','success','warning','error')),
+    read BOOLEAN DEFAULT FALSE,
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Experience answers
+  `CREATE TABLE IF NOT EXISTS experience_answers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    question_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );`,
+
+  // Helpful indexes
+  `CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);`,
+  `CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_messages_job_id ON messages(job_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON reviews(reviewee_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);`
+];
+
 // Seed Data (Simulating the initial DB state)
 const SEED_USERS: User[] = [
   { id: 'client1', name: 'Sarah Connor', email: 'sarah@example.com', role: UserRole.CLIENT, avatar: 'https://picsum.photos/200/200?random=1', rating: 4.8, ratingCount: 12, location: 'Cape Town', firstName: 'Sarah', surname: 'Connor', nationality: 'South African', residencyStatus: 'Citizen (Born)' },
@@ -117,11 +250,40 @@ class DBService {
   // --- USERS ---
   async getUsers(): Promise<User[]> {
     await this.delay();
+    const query = `SELECT * FROM users ORDER BY created_at DESC;`;
+    void query;
     return this.get<User[]>(KEYS.USERS);
   }
 
   async saveUser(user: User): Promise<User> {
     await this.delay();
+    const query = `INSERT INTO users (id, name, email, role, avatar, rating, rating_count, bio, location, is_suspended, first_name, middle_name, surname, date_of_birth, address, place_of_birth, nationality, residency_status, languages, education_level, marital_status, school, cv_file_name)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+                   ON CONFLICT (id) DO UPDATE SET
+                     name=EXCLUDED.name,
+                     email=EXCLUDED.email,
+                     role=EXCLUDED.role,
+                     avatar=EXCLUDED.avatar,
+                     rating=EXCLUDED.rating,
+                     rating_count=EXCLUDED.rating_count,
+                     bio=EXCLUDED.bio,
+                     location=EXCLUDED.location,
+                     is_suspended=EXCLUDED.is_suspended,
+                     first_name=EXCLUDED.first_name,
+                     middle_name=EXCLUDED.middle_name,
+                     surname=EXCLUDED.surname,
+                     date_of_birth=EXCLUDED.date_of_birth,
+                     address=EXCLUDED.address,
+                     place_of_birth=EXCLUDED.place_of_birth,
+                     nationality=EXCLUDED.nationality,
+                     residency_status=EXCLUDED.residency_status,
+                     languages=EXCLUDED.languages,
+                     education_level=EXCLUDED.education_level,
+                     marital_status=EXCLUDED.marital_status,
+                     school=EXCLUDED.school,
+                     cv_file_name=EXCLUDED.cv_file_name,
+                     updated_at=NOW();`;
+    void query;
     const users = this.get<User[]>(KEYS.USERS);
     const existingIndex = users.findIndex(u => u.id === user.id);
     if (existingIndex >= 0) {
@@ -136,11 +298,35 @@ class DBService {
   // --- JOBS ---
   async getJobs(): Promise<Job[]> {
     await this.delay();
+    const query = `SELECT * FROM jobs ORDER BY date ASC;`;
+    void query;
     return this.get<Job[]>(KEYS.JOBS);
   }
 
   async saveJob(job: Job): Promise<Job> {
     await this.delay();
+    const query = `INSERT INTO jobs (id, client_id, title, description, location, area_size, price, currency, date, status, rooms, bathrooms, images, payment_type, start_time, end_time, duration, work_dates, assigned_maid_id)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+                   ON CONFLICT (id) DO UPDATE SET
+                     title=EXCLUDED.title,
+                     description=EXCLUDED.description,
+                     location=EXCLUDED.location,
+                     area_size=EXCLUDED.area_size,
+                     price=EXCLUDED.price,
+                     currency=EXCLUDED.currency,
+                     date=EXCLUDED.date,
+                     status=EXCLUDED.status,
+                     rooms=EXCLUDED.rooms,
+                     bathrooms=EXCLUDED.bathrooms,
+                     images=EXCLUDED.images,
+                     payment_type=EXCLUDED.payment_type,
+                     start_time=EXCLUDED.start_time,
+                     end_time=EXCLUDED.end_time,
+                     duration=EXCLUDED.duration,
+                     work_dates=EXCLUDED.work_dates,
+                     assigned_maid_id=EXCLUDED.assigned_maid_id,
+                     updated_at=NOW();`;
+    void query;
     const jobs = this.get<Job[]>(KEYS.JOBS);
     const existingIndex = jobs.findIndex(j => j.id === job.id);
     if (existingIndex >= 0) {
@@ -154,6 +340,8 @@ class DBService {
 
   async deleteJob(jobId: string): Promise<void> {
     await this.delay();
+    const query = `DELETE FROM jobs WHERE id = $1;`;
+    void query;
     const jobs = this.get<Job[]>(KEYS.JOBS);
     this.set(KEYS.JOBS, jobs.filter(j => j.id !== jobId));
   }
@@ -161,11 +349,20 @@ class DBService {
   // --- APPLICATIONS ---
   async getApplications(): Promise<Application[]> {
     await this.delay();
+    const query = `SELECT * FROM applications ORDER BY applied_at DESC;`;
+    void query;
     return this.get<Application[]>(KEYS.APPLICATIONS);
   }
 
   async saveApplication(app: Application): Promise<Application> {
     await this.delay();
+    const query = `INSERT INTO applications (id, job_id, maid_id, status, message, applied_at, updated_at)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7)
+                   ON CONFLICT (id) DO UPDATE SET
+                     status=EXCLUDED.status,
+                     message=EXCLUDED.message,
+                     updated_at=NOW();`;
+    void query;
     const apps = this.get<Application[]>(KEYS.APPLICATIONS);
     const existingIndex = apps.findIndex(a => a.id === app.id);
     if (existingIndex >= 0) {
@@ -180,11 +377,16 @@ class DBService {
   // --- MESSAGES ---
   async getMessages(): Promise<Message[]> {
     await this.delay();
+    const query = `SELECT * FROM messages WHERE job_id = $1 AND ((sender_id = $2 AND receiver_id = $3) OR (sender_id = $3 AND receiver_id = $2)) ORDER BY timestamp;`;
+    void query;
     return this.get<Message[]>(KEYS.MESSAGES);
   }
 
   async saveMessage(msg: Message): Promise<Message> {
     await this.delay(100); // Faster for chat
+    const query = `INSERT INTO messages (id, job_id, sender_id, receiver_id, content, timestamp)
+                   VALUES ($1,$2,$3,$4,$5,$6);`;
+    void query;
     const messages = this.get<Message[]>(KEYS.MESSAGES);
     messages.push(msg);
     this.set(KEYS.MESSAGES, messages);
@@ -194,11 +396,16 @@ class DBService {
   // --- REVIEWS ---
   async getReviews(): Promise<Review[]> {
     await this.delay();
+    const query = `SELECT * FROM reviews WHERE reviewee_id = $1 ORDER BY created_at DESC;`;
+    void query;
     return this.get<Review[]>(KEYS.REVIEWS);
   }
 
   async saveReview(review: Review): Promise<Review> {
     await this.delay();
+    const query = `INSERT INTO reviews (id, job_id, reviewer_id, reviewee_id, rating, comment, created_at)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7);`;
+    void query;
     const reviews = this.get<Review[]>(KEYS.REVIEWS);
     reviews.push(review);
     this.set(KEYS.REVIEWS, reviews);
@@ -208,11 +415,16 @@ class DBService {
   // --- NOTIFICATIONS ---
   async getNotifications(): Promise<Notification[]> {
     await this.delay();
+    const query = `SELECT * FROM notifications WHERE user_id = $1 ORDER BY timestamp DESC;`;
+    void query;
     return this.get<Notification[]>(KEYS.NOTIFICATIONS);
   }
 
   async saveNotification(note: Notification): Promise<Notification> {
     await this.delay();
+    const query = `INSERT INTO notifications (id, user_id, message, type, read, timestamp)
+                   VALUES ($1,$2,$3,$4,$5,$6);`;
+    void query;
     const notifications = this.get<Notification[]>(KEYS.NOTIFICATIONS);
     notifications.push(note);
     this.set(KEYS.NOTIFICATIONS, notifications);
@@ -221,6 +433,8 @@ class DBService {
 
   async markNotificationsRead(userId: string): Promise<void> {
     await this.delay();
+    const query = `UPDATE notifications SET read = TRUE WHERE user_id = $1;`;
+    void query;
     const notifications = this.get<Notification[]>(KEYS.NOTIFICATIONS);
     const updated = notifications.map(n => n.userId === userId ? { ...n, read: true } : n);
     this.set(KEYS.NOTIFICATIONS, updated);
