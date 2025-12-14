@@ -253,6 +253,10 @@ const Navbar: React.FC<{
           </div>
           <div className="flex items-center space-x-4">
             
+            <Link to="/help" className="text-gray-500 hover:text-teal-600 text-sm font-medium transition-colors">
+              Help & FAQ
+            </Link>
+
             {currentUser && (
               <>
                 {/* Notifications */}
@@ -355,6 +359,72 @@ const Navbar: React.FC<{
         </div>
       </div>
     </nav>
+  );
+};
+
+const HelpPage: React.FC = () => {
+  const [openSection, setOpenSection] = useState<string | null>('general');
+
+  const faqs = {
+    general: [
+      { q: "What is MaidServSA?", a: "MaidServSA is a premium marketplace connecting homeowners with trusted, professional cleaning service providers in South Africa." },
+      { q: "Is it free to join?", a: "Yes, creating an account is completely free for both clients and maids. We believe in accessible opportunities for everyone." },
+      { q: "How do I reset my password?", a: "Currently, you can contact our support team at support@maidservsa.com for password assistance." }
+    ],
+    clients: [
+      { q: "How do I book a maid?", a: "Simply sign up as a client, post a job detailing your requirements, and wait for maids to apply. You can then review their profiles and accept the best fit." },
+      { q: "How are payments handled?", a: "Payments are agreed upon between the client and the maid. You can choose to pay hourly or a fixed rate. We recommend settling payment via EFT or Cash after the service is completed satisfactorily." },
+      { q: "Are the maids vetted?", a: "We encourage all maids to upload their CVs and provide detailed experience. Clients can view ratings and reviews from previous jobs to ensure trust." }
+    ],
+    maids: [
+      { q: "How do I find work?", a: "After creating your profile, go to your dashboard and browse the 'Find Work' tab. You can search by location and apply to jobs that match your schedule." },
+      { q: "How do I get paid?", a: "Payment terms are set by the client in the job posting. You will be paid directly by the client according to the agreed method (e.g., Cash or EFT)." },
+      { q: "How can I improve my rating?", a: "Provide excellent service, be punctual, and communicate clearly. Happy clients are more likely to leave 5-star reviews!" }
+    ]
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+      <div className="text-center mb-12">
+        <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">Help Center & FAQ</h1>
+        <p className="mt-4 text-lg text-gray-500">Find answers to common questions about MaidServSA.</p>
+      </div>
+
+      <div className="grid md:grid-cols-4 gap-6">
+        <div className="md:col-span-1 space-y-2">
+           {['general', 'clients', 'maids'].map(section => (
+             <button
+               key={section}
+               onClick={() => setOpenSection(section)}
+               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                 openSection === section ? 'bg-teal-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50'
+               }`}
+             >
+               {section.charAt(0).toUpperCase() + section.slice(1)}
+             </button>
+           ))}
+        </div>
+
+        <div className="md:col-span-3 space-y-4">
+           {openSection && faqs[openSection as keyof typeof faqs].map((faq, idx) => (
+             <div key={idx} className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4">
+                   <h3 className="text-lg font-medium text-gray-900 mb-2">{faq.q}</h3>
+                   <p className="text-gray-600">{faq.a}</p>
+                </div>
+             </div>
+           ))}
+        </div>
+      </div>
+
+      <div className="mt-12 bg-teal-50 rounded-xl p-8 text-center border border-teal-100">
+         <h3 className="text-xl font-bold text-teal-900 mb-2">Still have questions?</h3>
+         <p className="text-teal-700 mb-6">Our support team is always here to help you.</p>
+         <a href="mailto:support@maidservsa.com" className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700">
+            Contact Support
+         </a>
+      </div>
+    </div>
   );
 };
 
@@ -563,346 +633,242 @@ const FullCalendarSelector: React.FC<{
   selectedDates: string[];
   onChange: (dates: string[]) => void;
 }> = ({ selectedDates, onChange }) => {
-  const [viewDate, setViewDate] = useState(new Date());
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragMode, setDragMode] = useState<'add' | 'remove'>('add');
+  const [currentDate, setCurrentDate] = useState('');
 
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-
-  const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
-  const getFirstDay = (y: number, m: number) => new Date(y, m, 1).getDay();
-
-  const daysCount = getDaysInMonth(year, month);
-  const startDay = getFirstDay(year, month); // 0 = Sunday
-
-  const handleMouseDown = (dateStr: string) => {
-    setIsDragging(true);
-    const isSelected = selectedDates.includes(dateStr);
-    const mode = isSelected ? 'remove' : 'add';
-    setDragMode(mode);
-    updateDate(dateStr, mode);
-  };
-
-  const handleMouseEnter = (dateStr: string) => {
-    if (isDragging) {
-      updateDate(dateStr, dragMode);
+  const addDate = () => {
+    if (currentDate && !selectedDates.includes(currentDate)) {
+      onChange([...selectedDates, currentDate]);
+      setCurrentDate('');
     }
   };
 
-  const updateDate = (dateStr: string, mode: 'add' | 'remove') => {
-    let newDates = [...selectedDates];
-    if (mode === 'add') {
-      if (!newDates.includes(dateStr)) newDates.push(dateStr);
-    } else {
-      newDates = newDates.filter(d => d !== dateStr);
-    }
-    onChange(newDates);
-  };
-
-  useEffect(() => {
-    const handleUp = () => setIsDragging(false);
-    window.addEventListener('mouseup', handleUp);
-    return () => window.removeEventListener('mouseup', handleUp);
-  }, []);
-
-  const changeMonth = (delta: number) => {
-    setViewDate(new Date(year, month + delta, 1));
-  };
-
-  const renderDays = () => {
-    const days = [];
-    const emptySlots = startDay; // Depends on locale, assuming Sun=0
-
-    // Empty slots
-    for (let i = 0; i < emptySlots; i++) {
-      days.push(<div key={`empty-${i}`} className="h-10 md:h-14"></div>);
-    }
-
-    // Days
-    for (let i = 1; i <= daysCount; i++) {
-      // Manually construct YYYY-MM-DD to avoid timezone issues
-      const currentMonth = month + 1;
-      const dateStr = `${year}-${String(currentMonth).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      const isSelected = selectedDates.includes(dateStr);
-      const isToday = new Date().toISOString().split('T')[0] === dateStr;
-
-      days.push(
-        <div
-          key={dateStr}
-          onMouseDown={() => handleMouseDown(dateStr)}
-          onMouseEnter={() => handleMouseEnter(dateStr)}
-          className={`
-            h-10 md:h-14 border border-gray-100 flex items-center justify-center cursor-pointer select-none transition-all duration-100
-            ${isSelected ? 'bg-teal-600 text-white font-semibold shadow-inner' : 'hover:bg-teal-50 text-gray-700 bg-white'}
-            ${isToday && !isSelected ? 'ring-2 ring-teal-400 ring-inset' : ''}
-          `}
-        >
-          {i}
-        </div>
-      );
-    }
-    return days;
+  const removeDate = (date: string) => {
+    onChange(selectedDates.filter(d => d !== date));
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm select-none">
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <button type="button" onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-200 rounded-full transition-colors"><IconChevronLeft className="w-5 h-5 text-gray-600"/></button>
-        <span className="font-semibold text-gray-900">{viewDate.toLocaleDateString('default', { month: 'long', year: 'numeric' })}</span>
-        <button type="button" onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-200 rounded-full transition-colors"><IconChevronRight className="w-5 h-5 text-gray-600"/></button>
+    <div>
+      <label className={LABEL_CLASS}>Work Dates</label>
+      <div className="flex gap-2 mb-2">
+        <input 
+          type="date" 
+          value={currentDate} 
+          onChange={(e) => setCurrentDate(e.target.value)} 
+          className={INPUT_CLASS}
+        />
+        <button type="button" onClick={addDate} className="px-4 py-2 bg-teal-600 text-white rounded-md">Add</button>
       </div>
-      <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-          <div key={d} className="py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">{d}</div>
+      <div className="flex flex-wrap gap-2">
+        {selectedDates.map(date => (
+          <span key={date} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+            {date}
+            <button type="button" onClick={() => removeDate(date)} className="ml-1 text-teal-600 hover:text-teal-800">
+              <IconXCircle className="w-4 h-4" />
+            </button>
+          </span>
         ))}
-      </div>
-      <div className="grid grid-cols-7 bg-white">
-        {renderDays()}
-      </div>
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 flex justify-between items-center">
-         <span>{selectedDates.length} days selected</span>
-         <span className="italic">Click & drag to select</span>
       </div>
     </div>
   );
 };
 
 const JobModal: React.FC<{
+  job?: Job;
   isOpen: boolean;
   onClose: () => void;
   onSave: (job: Job) => void;
-  initialJob?: Job;
   clientId: string;
-}> = ({ isOpen, onClose, onSave, initialJob, clientId }) => {
-  const [jobData, setJobData] = useState<Partial<Job>>(initialJob || {
-    title: '', description: '', location: '', price: 0, paymentType: PaymentType.FIXED,
-    rooms: 1, bathrooms: 1, areaSize: 50, startTime: '09:00', endTime: '17:00', duration: 8, workDates: []
+}> = ({ job, isOpen, onClose, onSave, clientId }) => {
+  const [formData, setFormData] = useState<Partial<Job>>({
+    title: '',
+    description: '',
+    location: '',
+    areaSize: 0,
+    price: 0,
+    rooms: 1,
+    bathrooms: 1,
+    paymentType: PaymentType.FIXED,
+    startTime: '08:00',
+    endTime: '12:00',
+    workDates: [],
+    currency: 'R'
   });
-  const [generating, setGenerating] = useState(false);
+  const [loadingAI, setLoadingAI] = useState(false);
 
   useEffect(() => {
-    if (initialJob) setJobData(initialJob);
-  }, [initialJob]);
+    if (job) {
+      setFormData(job);
+    } else {
+      setFormData({
+        title: '',
+        description: '',
+        location: '',
+        areaSize: 0,
+        price: 0,
+        rooms: 1,
+        bathrooms: 1,
+        paymentType: PaymentType.FIXED,
+        startTime: '08:00',
+        endTime: '12:00',
+        workDates: [],
+        currency: 'R'
+      });
+    }
+  }, [job, isOpen]);
 
-  if (!isOpen) return null;
-
-  const handleGenerateDescription = async () => {
-    setGenerating(true);
+  const handleGenerateDesc = async () => {
+    if (!formData.location || !formData.areaSize) {
+      alert("Please fill in location and size first.");
+      return;
+    }
+    setLoadingAI(true);
     const desc = await generateJobDescription(
-      jobData.rooms || 0,
-      jobData.bathrooms || 0,
-      jobData.areaSize || 0,
-      jobData.location || '',
-      jobData.title || 'General cleaning'
+      formData.rooms || 0, 
+      formData.bathrooms || 0, 
+      formData.areaSize || 0, 
+      formData.location || '', 
+      formData.title || 'General Cleaning'
     );
-    setJobData(prev => ({ ...prev, description: desc }));
-    setGenerating(false);
+    setFormData(prev => ({ ...prev, description: desc }));
+    setLoadingAI(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const duration = parseInt(formData.endTime!.split(':')[0]) - parseInt(formData.startTime!.split(':')[0]);
     const newJob: Job = {
-      id: initialJob?.id || `job_${Date.now()}`,
+      id: job?.id || `job_${Date.now()}`,
       clientId,
-      status: initialJob?.status || JobStatus.OPEN,
-      currency: 'R',
-      images: [],
-      date: jobData.workDates?.[0] || new Date().toISOString(), // Primary date
-      history: initialJob?.history || [{ status: JobStatus.OPEN, timestamp: new Date().toISOString(), note: 'Job created' }],
-      ...jobData as Job
+      title: formData.title!,
+      description: formData.description!,
+      location: formData.location!,
+      areaSize: formData.areaSize!,
+      price: formData.price!,
+      currency: formData.currency!,
+      date: formData.workDates?.[0] || new Date().toISOString().split('T')[0],
+      status: job?.status || JobStatus.OPEN,
+      rooms: formData.rooms!,
+      bathrooms: formData.bathrooms!,
+      images: job?.images || [],
+      paymentType: formData.paymentType!,
+      startTime: formData.startTime!,
+      endTime: formData.endTime!,
+      duration: duration > 0 ? duration : 4,
+      workDates: formData.workDates || [],
+      history: job?.history || []
     };
     onSave(newJob);
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 bg-white overflow-hidden flex flex-col animate-fade-in-up">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white z-10 shadow-sm">
-        <div>
-           <h2 className="text-xl font-bold text-gray-900">{initialJob ? 'Edit Job Posting' : 'Create New Job Posting'}</h2>
-           <p className="text-sm text-gray-500">Provide details about your cleaning requirements.</p>
-        </div>
-        <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
-           <IconXCircle className="w-8 h-8" />
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="max-w-7xl mx-auto p-6 md:p-8">
-           <form onSubmit={handleSubmit} id="jobForm" className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-              
-              {/* Left Column: Job Details */}
-              <div className="space-y-6">
-                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center"><IconHome className="w-5 h-5 mr-2 text-teal-600"/> Job Details</h3>
-                    <div className="space-y-4">
-                       <div>
-                          <label className={LABEL_CLASS}>Job Title</label>
-                          <input type="text" required className={INPUT_CLASS} placeholder="e.g. Weekly Home Cleaning" value={jobData.title} onChange={e => setJobData({...jobData, title: e.target.value})} />
-                       </div>
-                       <div>
-                          <label className={LABEL_CLASS}>Location</label>
-                          <LocationAutocomplete 
-                             required 
-                             className={INPUT_CLASS} 
-                             value={jobData.location || ''} 
-                             onChange={(val) => setJobData({...jobData, location: val})} 
-                             placeholder="Search your area..."
-                          />
-                       </div>
-                       <div className="grid grid-cols-3 gap-4">
-                          <div>
-                             <label className={LABEL_CLASS}>Rooms</label>
-                             <input type="number" min="0" className={INPUT_CLASS} value={jobData.rooms} onChange={e => setJobData({...jobData, rooms: parseInt(e.target.value)})} />
-                          </div>
-                          <div>
-                             <label className={LABEL_CLASS}>Bathrooms</label>
-                             <input type="number" min="0" className={INPUT_CLASS} value={jobData.bathrooms} onChange={e => setJobData({...jobData, bathrooms: parseInt(e.target.value)})} />
-                          </div>
-                          <div>
-                             <label className={LABEL_CLASS}>Area (sqm)</label>
-                             <input type="number" min="0" className={INPUT_CLASS} value={jobData.areaSize} onChange={e => setJobData({...jobData, areaSize: parseInt(e.target.value)})} />
-                          </div>
-                       </div>
-                       <div>
-                          <div className="flex justify-between items-center mb-1">
-                             <label className={LABEL_CLASS}>Description & Requirements</label>
-                             <button type="button" onClick={handleGenerateDescription} disabled={generating} className="text-xs text-teal-600 hover:text-teal-800 flex items-center font-medium bg-teal-50 px-2 py-1 rounded-full transition-colors hover:bg-teal-100">
-                               {generating ? 'Generating...' : <><IconSparkles className="w-3 h-3 mr-1"/> AI Generate</>}
-                             </button>
-                          </div>
-                          <textarea rows={4} required className={INPUT_CLASS} value={jobData.description} onChange={e => setJobData({...jobData, description: e.target.value})} placeholder="Describe specific tasks, preferred products, etc." />
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center"><IconFileText className="w-5 h-5 mr-2 text-teal-600"/> Payment & Rates</h3>
-                    <div className="grid grid-cols-2 gap-6">
-                       <FormSelect
-                          label="Payment Type"
-                          value={jobData.paymentType || PaymentType.FIXED}
-                          onChange={e => setJobData({...jobData, paymentType: e.target.value as PaymentType})}
-                          options={[
-                            { value: PaymentType.FIXED, label: 'Fixed Price (Total)' },
-                            { value: PaymentType.HOURLY, label: 'Hourly Rate' }
-                          ]}
-                       />
-                       <div>
-                          <label className={LABEL_CLASS}>Price (R)</label>
-                          <div className="relative rounded-md shadow-sm">
-                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <span className="text-gray-500 sm:text-sm">R</span>
-                             </div>
-                             <input type="number" min="0" required className={`${INPUT_CLASS} pl-7`} value={jobData.price} onChange={e => setJobData({...jobData, price: parseInt(e.target.value)})} />
-                          </div>
-                       </div>
-                    </div>
-                 </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity" onClick={onClose}><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div>
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+           <form onSubmit={handleSubmit} className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">{job ? 'Edit Job' : 'Post New Job'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                   <label className={LABEL_CLASS}>Job Title</label>
+                   <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className={INPUT_CLASS} placeholder="e.g., Weekly Home Cleaning"/>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>Location</label>
+                   <LocationAutocomplete value={formData.location || ''} onChange={val => setFormData({...formData, location: val})} className={INPUT_CLASS} required/>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>Payment Type</label>
+                   <select value={formData.paymentType} onChange={e => setFormData({...formData, paymentType: e.target.value as PaymentType})} className={INPUT_CLASS}>
+                      <option value={PaymentType.FIXED}>Fixed Price</option>
+                      <option value={PaymentType.HOURLY}>Hourly Rate</option>
+                   </select>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>Price (R)</label>
+                   <input type="number" required value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} className={INPUT_CLASS}/>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>Size (sqm)</label>
+                   <input type="number" required value={formData.areaSize} onChange={e => setFormData({...formData, areaSize: Number(e.target.value)})} className={INPUT_CLASS}/>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>Bedrooms</label>
+                   <input type="number" required value={formData.rooms} onChange={e => setFormData({...formData, rooms: Number(e.target.value)})} className={INPUT_CLASS}/>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>Bathrooms</label>
+                   <input type="number" required value={formData.bathrooms} onChange={e => setFormData({...formData, bathrooms: Number(e.target.value)})} className={INPUT_CLASS}/>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>Start Time</label>
+                   <input type="time" required value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className={INPUT_CLASS}/>
+                </div>
+                <div>
+                   <label className={LABEL_CLASS}>End Time</label>
+                   <input type="time" required value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className={INPUT_CLASS}/>
+                </div>
+                <div className="md:col-span-2">
+                    <FullCalendarSelector selectedDates={formData.workDates || []} onChange={dates => setFormData({...formData, workDates: dates})} />
+                </div>
+                <div className="md:col-span-2">
+                   <div className="flex justify-between items-center mb-1">
+                     <label className={LABEL_CLASS}>Description</label>
+                     <button type="button" onClick={handleGenerateDesc} disabled={loadingAI} className="text-xs text-teal-600 hover:text-teal-800 flex items-center">
+                        <IconSparkles className="w-3 h-3 mr-1"/> {loadingAI ? 'Generating...' : 'Auto-Generate'}
+                     </button>
+                   </div>
+                   <textarea rows={3} required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className={INPUT_CLASS}/>
+                </div>
               </div>
-
-              {/* Right Column: Schedule */}
-              <div className="space-y-6">
-                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-full">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center"><IconCalendar className="w-5 h-5 mr-2 text-teal-600"/> Schedule</h3>
-                    <div className="space-y-6">
-                       <div className="grid grid-cols-2 gap-4">
-                          <div>
-                             <label className={LABEL_CLASS}>Start Time</label>
-                             <input type="time" className={INPUT_CLASS} value={jobData.startTime} onChange={e => setJobData({...jobData, startTime: e.target.value})} />
-                          </div>
-                          <div>
-                             <label className={LABEL_CLASS}>End Time</label>
-                             <input type="time" className={INPUT_CLASS} value={jobData.endTime} onChange={e => setJobData({...jobData, endTime: e.target.value})} />
-                          </div>
-                       </div>
-                       
-                       <div>
-                          <label className={LABEL_CLASS}>Select Dates</label>
-                          <p className="text-xs text-gray-500 mb-3">Click on dates to select. Click and drag to select multiple consecutive days.</p>
-                          <FullCalendarSelector 
-                             selectedDates={jobData.workDates || []} 
-                             onChange={(dates) => setJobData({...jobData, workDates: dates})} 
-                          />
-                       </div>
-                       
-                       {jobData.workDates && jobData.workDates.length > 0 && (
-                          <div className="bg-teal-50 border border-teal-100 rounded-lg p-4">
-                             <h4 className="text-sm font-semibold text-teal-800 mb-2">Summary</h4>
-                             <p className="text-sm text-teal-700">
-                                Total Days: <span className="font-bold">{jobData.workDates.length}</span>
-                             </p>
-                             <p className="text-sm text-teal-700">
-                                Estimated Total: <span className="font-bold">R{jobData.paymentType === PaymentType.FIXED ? (jobData.price || 0) * 1 : (jobData.price || 0) * (jobData.duration || 8) * jobData.workDates.length}</span>
-                                {jobData.paymentType === PaymentType.HOURLY && <span className="text-xs font-normal"> (approx based on 8h/day)</span>}
-                             </p>
-                          </div>
-                       )}
-                    </div>
-                 </div>
+              <div className="mt-5 flex justify-end gap-3">
+                 <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>
+                 <button type="submit" className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700">Save Job</button>
               </div>
-
            </form>
         </div>
-      </div>
-
-      {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10">
-         <button type="button" onClick={onClose} className="px-6 py-2.5 bg-white text-gray-700 font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
-            Cancel
-         </button>
-         <button type="submit" form="jobForm" className="px-8 py-2.5 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center">
-            {initialJob ? 'Save Changes' : 'Post Job Now'} <IconChevronRight className="ml-2 w-4 h-4"/>
-         </button>
       </div>
     </div>
   );
 };
 
-const CalendarView: React.FC<{
-  applications: Application[];
-  jobs: Job[];
-  currentUserId: string;
-}> = ({ applications, jobs, currentUserId }) => {
-  const myApps = applications.filter(a => a.maidId === currentUserId && a.status === ApplicationStatus.ACCEPTED);
-  const myJobs = myApps.map(app => jobs.find(j => j.id === app.jobId)).filter(j => !!j) as Job[];
+const CalendarView: React.FC<{ jobs: Job[] }> = ({ jobs }) => {
+  const sortedJobs = [...jobs].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
-  myJobs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
   return (
     <div className="bg-white shadow overflow-hidden sm:rounded-md">
-      <div className="px-4 py-5 border-b border-gray-200 sm:px-6">
-        <h3 className="text-lg leading-6 font-medium text-gray-900">Upcoming Schedule</h3>
-      </div>
       <ul className="divide-y divide-gray-200">
-        {myJobs.map(job => (
+        {sortedJobs.map((job) => (
           <li key={job.id} className="px-4 py-4 sm:px-6">
-            <div className="flex items-center justify-between">
-               <p className="text-sm font-medium text-teal-600 truncate">{job.title}</p>
-               <div className="ml-2 flex-shrink-0 flex">
-                  <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+             <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-teal-600 truncate">{job.title}</p>
+                <div className="ml-2 flex-shrink-0 flex">
+                  <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    job.status === JobStatus.COMPLETED ? 'bg-green-100 text-green-800' : 
+                    job.status === JobStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-800' : 
+                    'bg-yellow-100 text-yellow-800'}`
+                  }>
                     {job.status}
                   </p>
-               </div>
-            </div>
-            <div className="mt-2 sm:flex sm:justify-between">
-              <div className="sm:flex">
-                <p className="flex items-center text-sm text-gray-500 mr-6">
-                  <IconCalendar className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
-                  {new Date(job.date).toLocaleDateString()}
-                </p>
-                <p className="flex items-center text-sm text-gray-500">
-                  <IconClock className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
-                  {job.startTime} - {job.endTime}
-                </p>
-              </div>
-            </div>
+                </div>
+             </div>
+             <div className="mt-2 sm:flex sm:justify-between">
+                <div className="sm:flex">
+                  <p className="flex items-center text-sm text-gray-500 mr-6">
+                    <IconCalendar className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
+                    {job.date}
+                  </p>
+                  <p className="flex items-center text-sm text-gray-500">
+                    <IconClock className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
+                    {job.startTime} - {job.endTime}
+                  </p>
+                </div>
+             </div>
           </li>
         ))}
-        {myJobs.length === 0 && <li className="px-4 py-8 text-center text-gray-500">No upcoming jobs scheduled.</li>}
+        {sortedJobs.length === 0 && <li className="px-4 py-4 text-center text-gray-500">No scheduled jobs</li>}
       </ul>
     </div>
   );
@@ -914,224 +880,121 @@ const MaidDashboard: React.FC<{
   applications: Application[];
   onApply: (jobId: string, message: string) => void;
 }> = ({ user, jobs, applications, onApply }) => {
-  const [activeTab, setActiveTab] = useState<'find' | 'schedule'>('find');
-  const [filterLocation, setFilterLocation] = useState('');
+  const [activeTab, setActiveTab] = useState<'find' | 'my'>('find');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [viewJob, setViewJob] = useState<Job | null>(null);
-  
-  const openJobs = jobs.filter(j => j.status === JobStatus.OPEN && !applications.find(a => a.jobId === j.id && a.maidId === user.id));
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [filterLocation, setFilterLocation] = useState('');
+
   const myApplications = applications.filter(a => a.maidId === user.id);
+  const myJobIds = myApplications.map(a => a.jobId);
   
-  const filteredJobs = openJobs.filter(j => 
-     j.title.toLowerCase().includes(filterLocation.toLowerCase()) || 
-     j.location.toLowerCase().includes(filterLocation.toLowerCase())
+  const availableJobs = jobs.filter(j => 
+    j.status === JobStatus.OPEN && 
+    !myJobIds.includes(j.id) &&
+    (filterLocation === '' || j.location.toLowerCase().includes(filterLocation.toLowerCase()))
   );
+
+  const myJobsList = jobs.filter(j => 
+    myJobIds.includes(j.id) || j.assignedMaidId === user.id
+  );
+
+  const handleApplyClick = (job: Job) => {
+    setSelectedJob(job);
+    setShowApplyModal(true);
+  };
+
+  const submitApplication = (message: string) => {
+    if (selectedJob) {
+      onApply(selectedJob.id, message);
+      setShowApplyModal(false);
+      setSelectedJob(null);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex space-x-4 mb-6 border-b border-gray-200">
-         <button className={`pb-2 px-1 text-sm font-medium ${activeTab === 'find' ? 'border-b-2 border-teal-500 text-teal-600' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setActiveTab('find')}>Find Work</button>
-         <button className={`pb-2 px-1 text-sm font-medium ${activeTab === 'schedule' ? 'border-b-2 border-teal-500 text-teal-600' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setActiveTab('schedule')}>My Schedule</button>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user.firstName || user.name}</h1>
+        <p className="text-gray-500">Find new opportunities or manage your schedule.</p>
+      </div>
+
+      <div className="flex border-b border-gray-200 mb-6">
+         <button onClick={() => setActiveTab('find')} className={`py-4 px-1 border-b-2 font-medium text-sm mr-8 ${activeTab === 'find' ? 'border-teal-500 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+            Find Work
+         </button>
+         <button onClick={() => setActiveTab('my')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'my' ? 'border-teal-500 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+            My Jobs & Applications
+         </button>
       </div>
 
       {activeTab === 'find' && (
-         <div>
-            <div className="mb-6 relative">
-               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10 mt-2.5"><IconFilter className="h-5 w-5 text-gray-400"/></div>
-               <LocationAutocomplete 
-                  className={INPUT_CLASS + " pl-10"} 
-                  placeholder="Search by location or keywords..." 
-                  value={filterLocation} 
-                  onChange={setFilterLocation} 
-               />
-            </div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-               {filteredJobs.map(job => (
-                  <div key={job.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow flex flex-col">
-                     <div className="p-5 flex-1">
-                        <div className="flex justify-between items-start">
-                           <h3 className="text-lg font-medium text-gray-900 truncate" title={job.title}>{job.title}</h3>
-                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
-                             R{job.price}
-                           </span>
-                        </div>
-                        <p className="mt-1 text-sm text-gray-500 flex items-center"><IconMapPin className="w-4 h-4 mr-1"/> {job.location}</p>
-                        <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-                           <div className="flex items-center"><IconHome className="w-4 h-4 mr-1"/> {job.rooms} bed, {job.bathrooms} bath</div>
-                           <div className="flex items-center"><IconCalendar className="w-4 h-4 mr-1"/> {new Date(job.date).toLocaleDateString()}</div>
-                        </div>
-                        <p className="mt-3 text-sm text-gray-600 line-clamp-2">{job.description}</p>
-                     </div>
-                     <div className="px-5 pb-5 pt-0 mt-auto grid grid-cols-2 gap-3">
-                        <button onClick={() => setViewJob(job)} className="w-full flex justify-center items-center px-4 py-2 border border-teal-600 text-teal-600 shadow-sm text-sm font-medium rounded-md bg-white hover:bg-teal-50 transition-colors">
-                           View Details
-                        </button>
-                        <button onClick={() => setSelectedJob(job)} className="w-full flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 transition-colors">
-                           Apply Now
-                        </button>
-                     </div>
-                  </div>
-               ))}
-               {filteredJobs.length === 0 && <p className="text-center text-gray-500 col-span-full py-8">No jobs found matching your criteria.</p>}
-            </div>
-         </div>
+        <div className="space-y-6">
+           <div className="flex gap-4 mb-4">
+             <input type="text" placeholder="Filter by location..." className={INPUT_CLASS} value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} />
+           </div>
+           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {availableJobs.map(job => (
+                <div key={job.id} className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">
+                   <div className="px-4 py-5 sm:p-6">
+                      <div className="flex justify-between">
+                         <h3 className="text-lg font-medium text-gray-900 truncate">{job.title}</h3>
+                         <span className="text-sm font-semibold text-teal-600">R{job.price}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-gray-500 flex items-center"><IconMapPin className="w-4 h-4 mr-1"/> {job.location}</p>
+                      <p className="mt-2 text-sm text-gray-600 line-clamp-2">{job.description}</p>
+                      <div className="mt-4">
+                         <button onClick={() => setSelectedJob(job)} className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700">
+                            View Details
+                         </button>
+                      </div>
+                   </div>
+                </div>
+              ))}
+              {availableJobs.length === 0 && <p className="text-gray-500 col-span-3 text-center py-8">No jobs found matching your criteria.</p>}
+           </div>
+        </div>
       )}
 
-      {activeTab === 'schedule' && (
-         <div className="space-y-8">
-            <CalendarView applications={applications} jobs={jobs} currentUserId={user.id} />
-            
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">My Applications</h3>
-              <div className="bg-white shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-                 <ul className="divide-y divide-gray-200">
-                    {myApplications.map(app => {
-                       const job = jobs.find(j => j.id === app.jobId);
-                       if (!job) return null;
-                       return (
-                          <li key={app.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
-                             <div className="flex items-center justify-between">
-                                <div className="text-sm font-medium text-teal-600 truncate">{job.title}</div>
-                                <div className="ml-2 flex-shrink-0 flex">
-                                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                      app.status === ApplicationStatus.ACCEPTED ? 'bg-green-100 text-green-800' :
-                                      app.status === ApplicationStatus.REJECTED ? 'bg-red-100 text-red-800' :
-                                      'bg-yellow-100 text-yellow-800'
-                                   }`}>
-                                      {app.status}
-                                   </span>
-                                </div>
-                             </div>
-                             <div className="mt-2 sm:flex sm:justify-between">
-                                <div className="sm:flex">
-                                   <p className="flex items-center text-sm text-gray-500 mr-6"><IconMapPin className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400"/> {job.location}</p>
-                                   <p className="flex items-center text-sm text-gray-500"><IconCalendar className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400"/> {new Date(job.date).toLocaleDateString()}</p>
-                                </div>
-                                <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                                   <Link to={`/chat/${app.id}`} className="text-teal-600 hover:text-teal-900 flex items-center"><IconMessageSquare className="w-4 h-4 mr-1"/> Chat</Link>
-                                </div>
-                             </div>
-                          </li>
-                       );
-                    })}
-                    {myApplications.length === 0 && <li className="px-4 py-8 text-center text-gray-500 text-sm">No applications yet.</li>}
-                 </ul>
-              </div>
-            </div>
-         </div>
+      {activeTab === 'my' && (
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+           <ul className="divide-y divide-gray-200">
+              {myJobsList.map(job => {
+                 const app = applications.find(a => a.jobId === job.id && a.maidId === user.id);
+                 return (
+                   <li key={job.id} className="px-4 py-4 sm:px-6">
+                      <div className="flex items-center justify-between">
+                         <div className="flex flex-col">
+                            <p className="text-sm font-medium text-teal-600 truncate">{job.title}</p>
+                            <p className="text-sm text-gray-500">{job.location}</p>
+                         </div>
+                         <div className="flex items-center">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                              ${app?.status === ApplicationStatus.ACCEPTED ? 'bg-green-100 text-green-800' : 
+                                app?.status === ApplicationStatus.REJECTED ? 'bg-red-100 text-red-800' : 
+                                'bg-yellow-100 text-yellow-800'}`}>
+                               {app?.status || 'Assigned'}
+                            </span>
+                         </div>
+                      </div>
+                   </li>
+                 );
+              })}
+              {myJobsList.length === 0 && <li className="px-4 py-8 text-center text-gray-500">No applications or active jobs.</li>}
+           </ul>
+        </div>
       )}
-      
-      {/* Apply Modal */}
-      <ApplyModal 
-         isOpen={!!selectedJob} 
-         onClose={() => setSelectedJob(null)} 
-         onSubmit={(msg) => { if(selectedJob) { onApply(selectedJob.id, msg); setSelectedJob(null); } }} 
-         jobTitle={selectedJob?.title || ''} 
-      />
-      
-      {/* Job Details Modal */}
+
       <JobDetailsModal 
-        job={viewJob} 
-        onClose={() => setViewJob(null)} 
-        onApply={(job) => {
-          setViewJob(null);
-          setSelectedJob(job);
-        }} 
+        job={selectedJob} 
+        onClose={() => setSelectedJob(null)} 
+        onApply={handleApplyClick} 
       />
-    </div>
-  );
-};
-
-const ApplicantProfileModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  user: User;
-}> = ({ isOpen, onClose, user }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-         <div className="fixed inset-0 transition-opacity" onClick={onClose}><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div>
-         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-              <div className="sm:flex sm:items-start">
-                 <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-teal-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <IconUser className="h-6 w-6 text-teal-600" />
-                 </div>
-                 <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">{user.name}</h3>
-                    <div className="mt-2">
-                       <p className="text-sm text-gray-500">{user.bio || "No bio provided."}</p>
-                       
-                       <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
-                          <div><span className="font-semibold">Rating:</span> {user.rating.toFixed(1)} ({user.ratingCount})</div>
-                          <div><span className="font-semibold">Nationality:</span> {user.nationality || 'N/A'}</div>
-                          <div><span className="font-semibold">Languages:</span> {user.languages || 'N/A'}</div>
-                          <div><span className="font-semibold">Experience:</span></div>
-                       </div>
-                       
-                       {user.experienceAnswers && (
-                          <div className="mt-4 space-y-2">
-                             {user.experienceAnswers.map(a => (
-                                <div key={a.questionId} className="text-sm">
-                                   <p className="font-medium text-gray-700">{a.question}</p>
-                                   <p className="text-gray-600">{a.answer}</p>
-                                </div>
-                             ))}
-                          </div>
-                       )}
-                    </div>
-                 </div>
-              </div>
-            </div>
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-              <button type="button" onClick={onClose} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:ml-3 sm:w-auto sm:text-sm">Close</button>
-            </div>
-         </div>
-       </div>
-    </div>
-  );
-};
-
-const RatingModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (rating: number, comment: string) => void;
-  targetName: string;
-}> = ({ isOpen, onClose, onSubmit, targetName }) => {
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-         <div className="fixed inset-0 transition-opacity" onClick={onClose}><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div>
-         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-               <h3 className="text-lg font-medium text-gray-900 mb-4">Rate {targetName}</h3>
-               <div className="flex items-center justify-center space-x-2 mb-4">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button key={star} onClick={() => setRating(star)} className="focus:outline-none">
-                       <IconStar className={`w-8 h-8 ${star <= rating ? 'text-yellow-400' : 'text-gray-300'}`} filled={star <= rating} />
-                    </button>
-                  ))}
-               </div>
-               <textarea 
-                 className={INPUT_CLASS} 
-                 rows={3} 
-                 placeholder="Share your experience..." 
-                 value={comment} 
-                 onChange={e => setComment(e.target.value)}
-               />
-            </div>
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-               <button onClick={() => { onSubmit(rating, comment); onClose(); }} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:ml-3 sm:w-auto sm:text-sm">Submit Review</button>
-               <button onClick={onClose} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button>
-            </div>
-         </div>
-       </div>
+      <ApplyModal 
+        isOpen={showApplyModal} 
+        onClose={() => setShowApplyModal(false)} 
+        onSubmit={submitApplication} 
+        jobTitle={selectedJob?.title || ''} 
+      />
     </div>
   );
 };
@@ -1141,631 +1004,339 @@ const ClientDashboard: React.FC<{
   jobs: Job[];
   applications: Application[];
   users: User[];
-  reviews: Review[];
   onPostJob: (job: Job) => void;
-  onEditJob: (job: Job) => void;
+  onUpdateJob: (job: Job) => void;
   onDeleteJob: (jobId: string) => void;
-  onAcceptApplication: (appId: string, jobId: string) => void;
-  onCancelJob: (jobId: string) => void;
-  onCompleteJob: (jobId: string) => void;
-  onRateUser: (jobId: string, revieweeId: string, rating: number, comment: string) => void;
-}> = ({ user, jobs, applications, users, reviews, onPostJob, onEditJob, onDeleteJob, onAcceptApplication, onCancelJob, onCompleteJob, onRateUser }) => {
-  const [showPostModal, setShowPostModal] = useState(false);
+  onUpdateApplicationStatus: (appId: string, status: ApplicationStatus) => void;
+}> = ({ user, jobs, applications, users, onPostJob, onUpdateJob, onDeleteJob, onUpdateApplicationStatus }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | undefined>(undefined);
-  const [selectedJobIdForApplicants, setSelectedJobIdForApplicants] = useState<string | null>(null);
-  const [selectedApplicant, setSelectedApplicant] = useState<User | null>(null);
-  const [showRatingModal, setShowRatingModal] = useState(false);
-  const [ratingTarget, setRatingTarget] = useState<{jobId: string, userId: string, name: string} | null>(null);
-  
-  const myJobs = jobs.filter(j => j.clientId === user.id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const [activeTab, setActiveTab] = useState<'jobs' | 'calendar'>('jobs');
 
-  const openEdit = (job: Job) => { setEditingJob(job); setShowPostModal(true); };
-  const openRate = (job: Job) => {
-     if(!job.assignedMaidId) return;
-     const maid = users.find(u => u.id === job.assignedMaidId);
-     if(maid) {
-        setRatingTarget({ jobId: job.id, userId: maid.id, name: maid.name });
-        setShowRatingModal(true);
-     }
+  const myJobs = jobs.filter(j => j.clientId === user.id);
+
+  const handleEdit = (job: Job) => {
+    setEditingJob(job);
+    setIsModalOpen(true);
   };
 
-  const getJobApplicants = (jobId: string) => {
-    return applications
-      .filter(a => a.jobId === jobId && a.status === ApplicationStatus.PENDING)
-      .map(a => {
-        const maid = users.find(u => u.id === a.maidId);
-        return { application: a, maid };
-      })
-      .filter(item => item.maid !== undefined) as { application: Application, maid: User }[];
-  };
-  
-  const analyzeApplicant = async (job: Job, maid: User) => {
-      const res = await analyzeCandidateMatch(job.description, maid.bio || 'No bio');
-      alert(res);
+  const handleCreate = () => {
+    setEditingJob(undefined);
+    setIsModalOpen(true);
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">My Dashboard</h1>
-        <button onClick={() => { setEditingJob(undefined); setShowPostModal(true); }} className="flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700">
-           <IconSparkles className="h-5 w-5 mr-2"/> Post New Job
-        </button>
+         <div>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-500">Manage your property cleanings.</p>
+         </div>
+         <button onClick={handleCreate} className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700">
+            Post New Job
+         </button>
       </div>
 
-      {myJobs.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg shadow">
-          <IconHome className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No jobs posted</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by creating a new job posting.</p>
-        </div>
+      <div className="flex border-b border-gray-200 mb-6">
+         <button onClick={() => setActiveTab('jobs')} className={`py-4 px-1 border-b-2 font-medium text-sm mr-8 ${activeTab === 'jobs' ? 'border-teal-500 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+            My Jobs
+         </button>
+         <button onClick={() => setActiveTab('calendar')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'calendar' ? 'border-teal-500 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+            Calendar
+         </button>
+      </div>
+
+      {activeTab === 'calendar' ? (
+        <CalendarView jobs={myJobs} />
       ) : (
         <div className="space-y-6">
-          {myJobs.map(job => {
-             const applicants = getJobApplicants(job.id);
-             const maid = users.find(u => u.id === job.assignedMaidId);
-             
-             // Get all applications for this job for history
-             const allApplications = applications
-                .filter(a => a.jobId === job.id)
-                .sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
-
+           {myJobs.map(job => {
+             const jobApps = applications.filter(a => a.jobId === job.id);
              return (
-               <div key={job.id} className="bg-white shadow rounded-lg overflow-hidden border border-gray-100">
-                  <div className="px-4 py-5 sm:px-6 flex justify-between items-start bg-gray-50">
-                     <div>
-                        <div className="flex items-center gap-3">
-                           <h3 className="text-lg leading-6 font-medium text-gray-900">{job.title}</h3>
-                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                             job.status === JobStatus.OPEN ? 'bg-green-100 text-green-800' : 
-                             job.status === JobStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-800' :
-                             job.status === JobStatus.COMPLETED ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-800'
-                           }`}>{job.status}</span>
-                        </div>
-                        <p className="mt-1 max-w-2xl text-sm text-gray-500 flex items-center gap-4">
-                           <span className="flex items-center"><IconCalendar className="w-4 h-4 mr-1"/> {new Date(job.date).toLocaleDateString()}</span>
-                           <span className="flex items-center"><IconMapPin className="w-4 h-4 mr-1"/> {job.location}</span>
-                           <span className="font-semibold text-teal-600">R{job.price} {job.paymentType === PaymentType.HOURLY ? '/hr' : 'Fixed'}</span>
-                        </p>
-                     </div>
-                     <div className="flex gap-2">
-                        {job.status === JobStatus.OPEN && (
-                           <>
-                             <button onClick={() => openEdit(job)} className="text-gray-400 hover:text-gray-500"><IconEdit className="w-5 h-5"/></button>
-                             <button onClick={() => { if(window.confirm('Delete this job?')) onDeleteJob(job.id); }} className="text-gray-400 hover:text-red-500"><IconTrash className="w-5 h-5"/></button>
-                           </>
-                        )}
-                     </div>
-                  </div>
-                  
-                  {/* Job Content */}
-                  <div className="px-4 py-4 sm:px-6">
-                     {job.status === JobStatus.OPEN && applicants.length > 0 && (
-                        <div className="mb-4">
-                           <h4 className="text-sm font-medium text-gray-900 mb-2">Applicants ({applicants.length})</h4>
-                           <ul className="divide-y divide-gray-200 border rounded-md">
-                              {applicants.map(({application, maid}) => (
-                                 <li key={application.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
-                                    <div className="flex items-center cursor-pointer" onClick={() => setSelectedApplicant(maid)}>
-                                       <img src={maid.avatar} alt="" className="h-8 w-8 rounded-full mr-3"/>
-                                       <div>
-                                          <p className="text-sm font-medium text-gray-900">{maid.name}</p>
-                                          <div className="flex items-center text-xs text-yellow-500">
-                                            <IconStar className="w-3 h-3 mr-1" filled/> {maid.rating.toFixed(1)} ({maid.ratingCount})
-                                          </div>
-                                       </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                       <button onClick={() => analyzeApplicant(job, maid)} className="text-xs text-purple-600 hover:text-purple-800 border border-purple-200 px-2 py-1 rounded">AI Analyze</button>
-                                       <Link to={`/chat/${application.id}`} className="p-1 text-gray-400 hover:text-teal-600"><IconMessageSquare className="w-5 h-5"/></Link>
-                                       <button onClick={() => onAcceptApplication(application.id, job.id)} className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full hover:bg-green-200 font-medium">Accept</button>
-                                    </div>
-                                 </li>
-                              ))}
-                           </ul>
-                        </div>
-                     )}
-
-                     {job.status === JobStatus.IN_PROGRESS && maid && (
-                        <div className="flex items-center justify-between bg-blue-50 p-4 rounded-lg">
-                           <div className="flex items-center">
-                              <img src={maid.avatar} alt="" className="h-10 w-10 rounded-full mr-3"/>
-                              <div>
-                                 <p className="text-sm font-medium text-blue-900">Job in progress with {maid.name}</p>
-                                 <p className="text-xs text-blue-700">Contact: {maid.email}</p>
-                              </div>
-                           </div>
-                           <div className="flex gap-2">
-                               <button onClick={() => onCancelJob(job.id)} className="px-3 py-1 bg-white text-red-600 border border-red-200 rounded text-sm hover:bg-red-50">Cancel Job</button>
-                               <button onClick={() => onCompleteJob(job.id)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Mark Complete</button>
-                           </div>
-                        </div>
-                     )}
-
-                     {job.status === JobStatus.COMPLETED && maid && (
-                         <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
-                            <div className="flex items-center">
-                               <IconCheckCircle className="h-5 w-5 text-green-500 mr-2"/>
-                               <span className="text-sm text-gray-700">Completed by {maid.name}</span>
-                            </div>
-                            {!reviews.find(r => r.jobId === job.id && r.reviewerId === user.id) && (
-                                <button onClick={() => openRate(job)} className="text-sm text-teal-600 hover:underline">Rate Service</button>
-                            )}
-                         </div>
-                     )}
-
-                     {/* Job Application History */}
-                     {allApplications.length > 0 && (
-                        <div className="mt-6 border-t border-gray-100 pt-4">
-                           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Job Application History</h4>
-                           <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                 <thead className="bg-gray-50">
-                                    <tr>
-                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applicant ID</th>
-                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                       <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied At</th>
-                                    </tr>
-                                 </thead>
-                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {allApplications.map(app => {
-                                       const applicant = users.find(u => u.id === app.maidId);
-                                       return (
-                                          <tr key={app.id}>
-                                             <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-mono">{app.maidId}</td>
-                                             <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">{applicant ? applicant.name : 'Unknown'}</td>
-                                             <td className="px-3 py-2 whitespace-nowrap">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                                   app.status === ApplicationStatus.ACCEPTED ? 'bg-green-100 text-green-800' :
-                                                   app.status === ApplicationStatus.REJECTED ? 'bg-red-100 text-red-800' :
-                                                   app.status === ApplicationStatus.PENDING ? 'bg-yellow-100 text-yellow-800' :
-                                                   'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                   {app.status}
-                                                </span>
-                                             </td>
-                                             <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">{new Date(app.appliedAt).toLocaleString()}</td>
-                                          </tr>
-                                       );
-                                    })}
-                                 </tbody>
-                              </table>
-                           </div>
-                        </div>
-                     )}
-                  </div>
+               <div key={job.id} className="bg-white shadow rounded-lg overflow-hidden">
+                 <div className="px-4 py-5 sm:px-6 flex justify-between items-start bg-gray-50">
+                    <div>
+                       <h3 className="text-lg leading-6 font-medium text-gray-900">{job.title}</h3>
+                       <p className="mt-1 max-w-2xl text-sm text-gray-500">{job.location} • {new Date(job.date).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex space-x-2">
+                       <button onClick={() => handleEdit(job)} className="text-gray-400 hover:text-gray-500"><IconEdit className="w-5 h-5"/></button>
+                       <button onClick={() => onDeleteJob(job.id)} className="text-red-400 hover:text-red-500"><IconTrash className="w-5 h-5"/></button>
+                    </div>
+                 </div>
+                 <div className="px-4 py-4 sm:px-6">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Applications ({jobApps.length})</h4>
+                    {jobApps.length === 0 ? <p className="text-sm text-gray-500 italic">No applications yet.</p> : (
+                      <ul className="divide-y divide-gray-200">
+                        {jobApps.map(app => {
+                           const maid = users.find(u => u.id === app.maidId);
+                           return (
+                             <li key={app.id} className="py-3 flex justify-between items-center">
+                                <div className="flex items-center">
+                                   <img src={maid?.avatar} className="h-8 w-8 rounded-full mr-3" alt=""/>
+                                   <div>
+                                      <p className="text-sm font-medium text-gray-900">{maid?.name}</p>
+                                      <p className="text-xs text-gray-500">{app.message}</p>
+                                   </div>
+                                </div>
+                                <div className="flex space-x-2">
+                                  {app.status === ApplicationStatus.PENDING && (
+                                    <>
+                                      <button onClick={() => onUpdateApplicationStatus(app.id, ApplicationStatus.ACCEPTED)} className="text-green-600 hover:text-green-800 text-xs font-medium border border-green-200 px-2 py-1 rounded bg-green-50">Accept</button>
+                                      <button onClick={() => onUpdateApplicationStatus(app.id, ApplicationStatus.REJECTED)} className="text-red-600 hover:text-red-800 text-xs font-medium border border-red-200 px-2 py-1 rounded bg-red-50">Reject</button>
+                                    </>
+                                  )}
+                                  {app.status !== ApplicationStatus.PENDING && (
+                                     <span className={`text-xs px-2 py-1 rounded ${app.status === ApplicationStatus.ACCEPTED ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{app.status}</span>
+                                  )}
+                                </div>
+                             </li>
+                           );
+                        })}
+                      </ul>
+                    )}
+                 </div>
                </div>
              );
-          })}
+           })}
+           {myJobs.length === 0 && <div className="text-center py-10 text-gray-500">You haven't posted any jobs yet.</div>}
         </div>
       )}
 
-      {showPostModal && <JobModal isOpen={showPostModal} onClose={() => setShowPostModal(false)} onSave={editingJob ? onEditJob : onPostJob} initialJob={editingJob} clientId={user.id} />}
-      {selectedApplicant && <ApplicantProfileModal isOpen={!!selectedApplicant} onClose={() => setSelectedApplicant(null)} user={selectedApplicant} />}
-      {showRatingModal && ratingTarget && <RatingModal isOpen={showRatingModal} onClose={() => setShowRatingModal(false)} onSubmit={(r, c) => onRateUser(ratingTarget.jobId, ratingTarget.userId, r, c)} targetName={ratingTarget.name} />}
+      <JobModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={job => {
+          if (editingJob) onUpdateJob(job);
+          else onPostJob(job);
+        }}
+        job={editingJob}
+        clientId={user.id}
+      />
     </div>
   );
 };
 
-const AdminDashboard: React.FC = () => (
-    <div className="p-8 text-center">
-        <h2 className="text-2xl font-bold mb-4">Admin Dashboard</h2>
-        <p>System administration tools would go here.</p>
-    </div>
-);
+const AuthPage: React.FC<{ onLogin: (email: string) => void }> = ({ onLogin }) => {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'client' | 'maid'>('client');
 
-const ChatPage: React.FC<{
-  currentUser: User | null;
-  applications: Application[];
-  jobs: Job[];
-  users: User[];
-  messages: Message[];
-  onSendMessage: (receiverId: string, content: string, jobId: string) => void;
-}> = ({ currentUser, applications, jobs, users, messages, onSendMessage }) => {
-    const { applicationId } = useParams<{ applicationId: string }>();
-    const [newMessage, setNewMessage] = useState('');
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onLogin(email);
+  };
 
-    const application = applications.find(a => a.id === applicationId);
-    const job = application ? jobs.find(j => j.id === application.jobId) : null;
+  const handleDemoLogin = (type: 'client' | 'maid' | 'admin') => {
+      if (type === 'client') onLogin('sarah@example.com');
+      else if (type === 'maid') onLogin('martha@example.com');
+      else onLogin('admin@maidservsa.com');
+  };
 
-    let otherUserId = '';
-    if (application && job && currentUser) {
-        if (currentUser.id === job.clientId) {
-            otherUserId = application.maidId;
-        } else if (currentUser.id === application.maidId) {
-            otherUserId = job.clientId;
-        }
-    }
-    const otherUser = users.find(u => u.id === otherUserId);
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <div className="mx-auto h-12 w-12 text-teal-600 flex justify-center">
+             <IconSparkles className="w-12 h-12" />
+          </div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Sign in to your account</h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <input type="hidden" name="remember" value="true" />
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="email-address" className="sr-only">Email address</label>
+              <input
+                id="email-address"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="role" className="sr-only">Role</label>
+              <select
+                 id="role"
+                 name="role"
+                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm"
+                 value={role}
+                 onChange={(e) => setRole(e.target.value as any)}
+              >
+                  <option value="client">Client</option>
+                  <option value="maid">Maid</option>
+              </select>
+            </div>
+          </div>
 
-    const chatMessages = useMemo(() => {
-        if (!currentUser || !job || !otherUserId) return [];
-        return messages.filter(m => 
-            m.jobId === job.id && 
-            ((m.senderId === currentUser.id && m.receiverId === otherUserId) || 
-             (m.senderId === otherUserId && m.receiverId === currentUser.id))
-        ).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    }, [messages, job, currentUser, otherUserId]);
-
-    const handleSend = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newMessage.trim() || !otherUserId || !job || !currentUser) return;
-        onSendMessage(otherUserId, newMessage, job.id);
-        setNewMessage('');
-    };
-
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatMessages]);
-
-    if (!currentUser) return <Navigate to="/auth" />;
-
-    if (!application || !job || !otherUser) {
-        return <div className="p-8 text-center text-gray-500">Conversation not found.</div>;
-    }
-
-    return (
-        <div className="max-w-4xl mx-auto px-4 py-8 h-[calc(100vh-64px)] flex flex-col">
-            <div className="bg-white shadow-sm border-b border-gray-200 rounded-t-lg px-6 py-4 flex justify-between items-center">
-                <div className="flex items-center">
-                    <img src={otherUser.avatar} className="w-10 h-10 rounded-full mr-3 object-cover" alt={otherUser.name} />
-                    <div>
-                        <h3 className="text-lg font-medium text-gray-900">{otherUser.name}</h3>
-                        <p className="text-xs text-gray-500">{job.title}</p>
-                    </div>
+          <div>
+            <button
+              type="submit"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+            >
+              Sign in
+            </button>
+          </div>
+        </form>
+        
+        <div className="mt-6">
+            <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
                 </div>
-                <Link to={currentUser.role === UserRole.CLIENT ? "/client/dashboard" : "/maid/dashboard"} className="text-sm text-teal-600 hover:text-teal-800">
-                    Back to Dashboard
-                </Link>
+                <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-gray-50 text-gray-500">Or use demo accounts</span>
+                </div>
             </div>
-
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-4">
-                {chatMessages.length === 0 && (
-                    <p className="text-center text-gray-400 text-sm py-10">Start the conversation with {otherUser.firstName || otherUser.name}...</p>
-                )}
-                {chatMessages.map(msg => {
-                    const isMe = msg.senderId === currentUser.id;
-                    return (
-                        <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[70%] rounded-lg px-4 py-2 text-sm shadow-sm ${
-                                isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'
-                            }`}>
-                                <p>{msg.content}</p>
-                                <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-teal-200' : 'text-gray-400'}`}>
-                                    {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                </p>
-                            </div>
-                        </div>
-                    );
-                })}
-                <div ref={messagesEndRef} />
-            </div>
-
-            <div className="bg-white border-t border-gray-200 p-4 rounded-b-lg">
-                <form onSubmit={handleSend} className="flex gap-3">
-                    <input 
-                        type="text" 
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        className="flex-1 border-gray-300 rounded-full focus:ring-teal-500 focus:border-teal-500 shadow-sm px-4 py-2 border bg-gray-50 text-sm text-gray-900"
-                        placeholder="Type your message..."
-                    />
-                    <button type="submit" disabled={!newMessage.trim()} className="bg-teal-600 text-white rounded-full p-2 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                        <IconSend className="w-5 h-5" />
-                    </button>
-                </form>
+            <div className="mt-6 grid grid-cols-3 gap-3">
+                <button onClick={() => handleDemoLogin('client')} className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                    Client
+                </button>
+                <button onClick={() => handleDemoLogin('maid')} className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                    Maid
+                </button>
+                 <button onClick={() => handleDemoLogin('admin')} className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                    Admin
+                </button>
             </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 };
 
-const LandingPage: React.FC<{ currentUser: User | null }> = ({ currentUser }) => {
+const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="relative bg-white overflow-hidden">
-      <div className="max-w-7xl mx-auto">
-        <div className="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
-          <main className="mt-10 mx-auto max-w-7xl px-4 sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 lg:px-8 xl:mt-28">
-            <div className="sm:text-center lg:text-left">
-              <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
-                <span className="block xl:inline">Premium cleaning services</span>{' '}
-                <span className="block text-teal-600 xl:inline">for your home</span>
-              </h1>
-              <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">
-                Connect with verified, professional maids in your area.  
-                Hire experienced and background-checked household staff for cleaning, cooking, childcare, elder care, and more — with flexible scheduling and transparent pricing.  
-                Create a profile, list your skills, browse trusted clients, accept bookings that suit your schedule, and get paid securely.  
-                Enjoy convenience, trust, and fairness — whether you’re a homeowner or a domestic-worker looking for work.
-              </p>
-              <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
-                {!currentUser ? (
+    <div className="min-h-screen bg-white">
+      <div className="relative overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <div className="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
+            <main className="mt-10 mx-auto max-w-7xl px-4 sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 lg:px-8 xl:mt-28">
+              <div className="sm:text-center lg:text-left">
+                <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
+                  <span className="block xl:inline">Professional cleaning</span>{' '}
+                  <span className="block text-teal-600 xl:inline">made simple</span>
+                </h1>
+                <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">
+                  Connect with vetted, reliable cleaners in your area. Secure payments, trusted reviews, and peace of mind.
+                </p>
+                <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start gap-3">
                   <div className="rounded-md shadow">
-                    <button
-                      onClick={() => navigate('/auth')}
-                      className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 md:py-4 md:text-lg"
-                    >
+                    <button onClick={() => navigate('/auth')} className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 md:py-4 md:text-lg md:px-10">
                       Get Started
                     </button>
                   </div>
-                ) : (
                   <div className="rounded-md shadow">
-                    <button
-                      onClick={() =>
-                        navigate(
-                          currentUser.role === UserRole.CLIENT
-                            ? '/client/dashboard'
-                            : currentUser.role === UserRole.MAID
-                            ? '/maid/dashboard'
-                            : '/admin/dashboard'
-                        )
-                      }
-                      className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 md:py-4 md:text-lg"
-                    >
-                      Go to Dashboard
-                    </button>
+                     <button onClick={() => navigate('/help')} className="w-full flex items-center justify-center px-8 py-3 border border-gray-300 text-base font-medium rounded-md text-teal-700 bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10">
+                        Learn More
+                     </button>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          </main>
+            </main>
+          </div>
+        </div>
+        <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2 bg-gray-50">
+           <img className="h-56 w-full object-cover sm:h-72 md:h-96 lg:w-full lg:h-full opacity-90" src="https://images.unsplash.com/photo-1581578731117-104f8a3d46a8?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" alt="Cleaning" />
         </div>
       </div>
-      <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
-        <img
-          className="h-56 w-full object-cover sm:h-72 md:h-96 lg:w-full lg:h-full"
-          src="https://images.pexels.com/photos/48889/cleaning-washing-cleanup-the-ilo-48889.jpeg"
-          alt="Cleaning home"
-        />
+
+      {/* About Us Section */}
+      <div className="bg-gray-50 py-16">
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+               <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">About MaidServSA</h2>
+               <p className="mt-4 max-w-2xl text-xl text-gray-500 mx-auto">Reinventing domestic services with trust and technology.</p>
+            </div>
+            
+            <div className="grid md:grid-cols-2 gap-12 items-center">
+               <div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">Our Mission</h3>
+                  <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                     We aim to empower domestic workers with dignified work opportunities and fair pay while providing homeowners with a convenient, safe, and transparent way to find trusted help. We believe in building a community based on mutual respect and reliability.
+                  </p>
+                  <div className="grid grid-cols-2 gap-6">
+                     <div className="bg-white p-4 rounded-lg shadow-sm">
+                        <IconCheckCircle className="w-8 h-8 text-teal-600 mb-2"/>
+                        <h4 className="font-semibold text-gray-900">Vetted Professionals</h4>
+                        <p className="text-sm text-gray-500">Rigorous background checks.</p>
+                     </div>
+                     <div className="bg-white p-4 rounded-lg shadow-sm">
+                        <IconLock className="w-8 h-8 text-teal-600 mb-2"/>
+                        <h4 className="font-semibold text-gray-900">Secure Platform</h4>
+                        <p className="text-sm text-gray-500">Your data and safety come first.</p>
+                     </div>
+                  </div>
+               </div>
+               <div className="relative h-96 rounded-xl overflow-hidden shadow-xl">
+                  <img src="https://images.unsplash.com/photo-1556911220-e15b29be8c8f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" alt="Team" className="absolute inset-0 w-full h-full object-cover"/>
+                  <div className="absolute inset-0 bg-teal-900 bg-opacity-20"></div>
+               </div>
+            </div>
+         </div>
       </div>
     </div>
   );
-};
-
-const AuthPage: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
-    const navigate = useNavigate();
-    const [isLogin, setIsLogin] = useState(true);
-    const [role, setRole] = useState<UserRole>(UserRole.CLIENT);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
-    
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            if (isLogin) {
-                // Mock login using db or just simple check since db logic is hidden
-                const users = await db.getUsers();
-                const user = users.find(u => u.email === email);
-                if (user) {
-                    onLogin(user);
-                    navigate(user.role === UserRole.CLIENT ? '/client/dashboard' : (user.role === UserRole.MAID ? '/maid/dashboard' : '/admin/dashboard'));
-                } else {
-                    alert('Invalid credentials');
-                }
-            } else {
-                const newUser: User = {
-                    id: `u_${Date.now()}`,
-                    name,
-                    email,
-                    role,
-                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-                    rating: 0,
-                    ratingCount: 0,
-                    isSuspended: false
-                };
-                await db.saveUser(newUser);
-                onLogin(newUser);
-                navigate(role === UserRole.CLIENT ? '/client/dashboard' : '/maid/dashboard');
-            }
-        } catch (err) {
-            console.error(err);
-            alert('Authentication failed');
-        }
-    };
-
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full space-y-8">
-                <div>
-                    <IconSparkles className="mx-auto h-12 w-12 text-teal-600" />
-                    <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">{isLogin ? 'Sign in to your account' : 'Create a new account'}</h2>
-                </div>
-                <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                    <div className="space-y-4">
-                        {!isLogin && (
-                           <>
-                            <div>
-                                <label className={LABEL_CLASS}>Full Name</label>
-                                <input type="text" required className={INPUT_CLASS} placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} />
-                            </div>
-                            <div className="p-2.5 bg-white border border-gray-300 rounded-md flex justify-around shadow-sm">
-                                <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input type="radio" checked={role === UserRole.CLIENT} onChange={() => setRole(UserRole.CLIENT)} className="text-teal-600 focus:ring-teal-500 h-4 w-4 border-gray-300" />
-                                    <span className="text-sm text-gray-700">I need a Maid</span>
-                                </label>
-                                <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input type="radio" checked={role === UserRole.MAID} onChange={() => setRole(UserRole.MAID)} className="text-teal-600 focus:ring-teal-500 h-4 w-4 border-gray-300" />
-                                    <span className="text-sm text-gray-700">I am a Maid</span>
-                                </label>
-                            </div>
-                           </>
-                        )}
-                        <div>
-                            <label className={LABEL_CLASS}>Email address</label>
-                            <input type="email" required className={INPUT_CLASS} placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className={LABEL_CLASS}>Password</label>
-                            <input type="password" required className={INPUT_CLASS} placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
-                        </div>
-                    </div>
-
-                    <div>
-                        <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 shadow-sm transition-colors">
-                            {isLogin ? 'Sign in' : 'Sign up'}
-                        </button>
-                    </div>
-                </form>
-                <div className="text-center">
-                    <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-teal-600 hover:text-teal-500 font-medium">
-                        {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
+}
 
 const App: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // INITIAL DATA LOAD
+  // Initial Data Load
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [u, j, a, r, n, m] = await Promise.all([
-          db.getUsers(),
-          db.getJobs(),
-          db.getApplications(),
-          db.getReviews(),
-          db.getNotifications(),
-          db.getMessages()
-        ]);
-        setUsers(u);
-        setJobs(j);
-        setApplications(a);
-        setReviews(r);
-        setNotifications(n);
-        setMessages(m);
-      } catch (error) {
-        console.error("Failed to load data:", error);
-      } finally {
-        setIsLoading(false);
-      }
+    const loadData = async () => {
+      setUsers(await db.getUsers());
+      setJobs(await db.getJobs());
+      setApplications(await db.getApplications());
+      setNotifications(await db.getNotifications());
+      setLoading(false);
     };
-    fetchData();
+    loadData();
   }, []);
 
-  const handleLogin = (user: User) => {
-    setCurrentUser(user);
-    // In a real app, this might set a token in localStorage
+  // Login Handler
+  const handleLogin = (email: string) => {
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (user) {
+      setCurrentUser(user);
+    } else {
+      alert('User not found. Try the demo accounts.');
+    }
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
   };
 
-  const handlePostJob = async (job: Job) => {
-    const newJob = await db.saveJob(job);
-    setJobs(prev => [...prev, newJob]);
-    
-    const note: Notification = {
-        id: Date.now().toString(),
-        userId: job.clientId,
-        message: `Job "${job.title}" posted successfully.`,
-        type: 'success',
-        read: false,
-        timestamp: new Date().toISOString()
-    };
-    await db.saveNotification(note);
-    setNotifications(prev => [...prev, note]);
-  };
-
-  const handleEditJob = async (updatedJob: Job) => {
-    await db.saveJob(updatedJob); // SaveJob handles update if ID exists
-    setJobs(prev => prev.map(j => j.id === updatedJob.id ? updatedJob : j));
-  };
-
-  const handleDeleteJob = async (jobId: string) => {
-    await db.deleteJob(jobId);
-    setJobs(prev => prev.filter(j => j.id !== jobId));
-  };
-  
-  const handleAcceptApplication = async (appId: string, jobId: string) => {
-      const app = applications.find(a => a.id === appId);
-      if (!app) return;
-
-      const updatedApps = await Promise.all(applications.map(async (a) => {
-          if (a.id === appId) {
-              const updated = { ...a, status: ApplicationStatus.ACCEPTED };
-              await db.saveApplication(updated);
-              return updated;
-          }
-          if (a.jobId === jobId && a.id !== appId) {
-              const updated = { ...a, status: ApplicationStatus.REJECTED };
-              await db.saveApplication(updated);
-              return updated;
-          }
-          return a;
-      }));
-      setApplications(updatedApps);
-
-      const jobToUpdate = jobs.find(j => j.id === jobId);
-      if (jobToUpdate) {
-          const updatedJob = { ...jobToUpdate, status: JobStatus.IN_PROGRESS, assignedMaidId: app.maidId };
-          await db.saveJob(updatedJob);
-          setJobs(prev => prev.map(j => j.id === jobId ? updatedJob : j));
-      }
-  };
-
-  const handleCancelJob = async (jobId: string) => {
-      const job = jobs.find(j => j.id === jobId);
-      if (job) {
-          const updated = { ...job, status: JobStatus.CANCELLED };
-          await db.saveJob(updated);
-          setJobs(prev => prev.map(j => j.id === jobId ? updated : j));
-      }
-  };
-
-  const handleCompleteJob = async (jobId: string) => {
-      const job = jobs.find(j => j.id === jobId);
-      if (job) {
-          const updated = { ...job, status: JobStatus.COMPLETED };
-          await db.saveJob(updated);
-          setJobs(prev => prev.map(j => j.id === jobId ? updated : j));
-      }
-  };
-
-  const handleRateUser = async (jobId: string, revieweeId: string, rating: number, comment: string) => {
-      if (!currentUser) return;
-      const review: Review = {
-          id: Date.now().toString(),
-          jobId,
-          reviewerId: currentUser.id,
-          revieweeId,
-          rating,
-          comment,
-          createdAt: new Date().toISOString()
-      };
-      await db.saveReview(review);
-      setReviews(prev => [...prev, review]);
-      
-      // Recalculate and update user rating
-      const targetUser = users.find(u => u.id === revieweeId);
-      if (targetUser) {
-          const newCount = targetUser.ratingCount + 1;
-          const newRating = ((targetUser.rating * targetUser.ratingCount) + rating) / newCount;
-          const updatedUser = { ...targetUser, rating: newRating, ratingCount: newCount };
-          await db.saveUser(updatedUser);
-          setUsers(prev => prev.map(u => u.id === revieweeId ? updatedUser : u));
-      }
-  };
-  
   const handleUpdateProfile = async (updatedUser: User) => {
-      await db.saveUser(updatedUser);
-      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-      if (currentUser && currentUser.id === updatedUser.id) {
-          setCurrentUser(updatedUser);
-      }
+    const saved = await db.saveUser(updatedUser);
+    setUsers(prev => prev.map(u => u.id === saved.id ? saved : u));
+    setCurrentUser(saved);
+  };
+
+  const handlePostJob = async (job: Job) => {
+    const saved = await db.saveJob(job);
+    setJobs(prev => [...prev, saved]);
+  };
+
+  const handleUpdateJob = async (job: Job) => {
+    const saved = await db.saveJob(job);
+    setJobs(prev => prev.map(j => j.id === saved.id ? saved : j));
+  };
+  
+  const handleDeleteJob = async (jobId: string) => {
+     await db.deleteJob(jobId);
+     setJobs(prev => prev.filter(j => j.id !== jobId));
   };
 
   const handleApply = async (jobId: string, message: string) => {
@@ -1778,86 +1349,112 @@ const App: React.FC = () => {
       message,
       appliedAt: new Date().toISOString()
     };
-    await db.saveApplication(newApp);
-    setApplications(prev => [...prev, newApp]);
+    const saved = await db.saveApplication(newApp);
+    setApplications(prev => [...prev, saved]);
+    
+    // Notify Client
+    const job = jobs.find(j => j.id === jobId);
+    if (job) {
+       const note: Notification = {
+          id: `not_${Date.now()}`,
+          userId: job.clientId,
+          message: `New application from ${currentUser.name} for ${job.title}`,
+          type: 'info',
+          read: false,
+          timestamp: new Date().toISOString()
+       };
+       const savedNote = await db.saveNotification(note);
+       setNotifications(prev => [...prev, savedNote]);
+    }
   };
 
+  const handleUpdateApplicationStatus = async (appId: string, status: ApplicationStatus) => {
+     const app = applications.find(a => a.id === appId);
+     if (app) {
+        const updated = { ...app, status };
+        await db.saveApplication(updated);
+        setApplications(prev => prev.map(a => a.id === appId ? updated : a));
+        
+        // Notify Maid
+        const note: Notification = {
+           id: `not_${Date.now()}`,
+           userId: app.maidId,
+           message: `Your application for job ID ${app.jobId} was ${status.toLowerCase()}`,
+           type: status === ApplicationStatus.ACCEPTED ? 'success' : 'error',
+           read: false,
+           timestamp: new Date().toISOString()
+        };
+        const savedNote = await db.saveNotification(note);
+        setNotifications(prev => [...prev, savedNote]);
+     }
+  };
+  
   const handleMarkNotificationsRead = async () => {
-    if (!currentUser) return;
-    await db.markNotificationsRead(currentUser.id);
-    setNotifications(prev => prev.map(n => n.userId === currentUser.id ? { ...n, read: true } : n));
+    if (currentUser) {
+       await db.markNotificationsRead(currentUser.id);
+       setNotifications(prev => prev.map(n => n.userId === currentUser.id ? { ...n, read: true } : n));
+    }
   };
 
-  const handleSendMessage = async (receiverId: string, content: string, jobId: string) => {
-      if (!currentUser) return;
-      const newMessage: Message = {
-          id: `msg_${Date.now()}`,
-          senderId: currentUser.id,
-          receiverId,
-          content,
-          timestamp: new Date().toISOString(),
-          jobId
-      };
-      await db.saveMessage(newMessage);
-      setMessages(prev => [...prev, newMessage]);
-  };
-
-  if (isLoading) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-gray-50">
-              <div className="flex flex-col items-center">
-                  <IconSparkles className="h-12 w-12 text-teal-600 animate-pulse" />
-                  <p className="mt-4 text-gray-500 text-sm">Loading MaidServSA...</p>
-              </div>
-          </div>
-      );
-  }
+  if (loading) return <div className="flex items-center justify-center h-screen text-teal-600">Loading...</div>;
 
   return (
     <HashRouter>
-      <Navbar currentUser={currentUser} notifications={notifications} onLogout={handleLogout} onMarkNotificationsRead={handleMarkNotificationsRead} />
-      <Routes>
-        <Route path="/" element={<LandingPage currentUser={currentUser} />} />
-        <Route path="/auth" element={<AuthPage onLogin={handleLogin} />} />
-        <Route path="/profile" element={currentUser ? <ProfilePage user={currentUser} onUpdate={handleUpdateProfile} /> : <Navigate to="/auth" />} />
-        <Route path="/client/dashboard" element={
-            currentUser?.role === UserRole.CLIENT ? 
-            <ClientDashboard 
+      <Navbar 
+        currentUser={currentUser} 
+        notifications={notifications} 
+        onLogout={handleLogout}
+        onMarkNotificationsRead={handleMarkNotificationsRead}
+      />
+      <div className="bg-gray-50 min-h-screen">
+        <Routes>
+          <Route path="/" element={
+             currentUser ? (
+               currentUser.role === UserRole.CLIENT ? <Navigate to="/client/dashboard"/> : 
+               currentUser.role === UserRole.MAID ? <Navigate to="/maid/dashboard"/> : 
+               <Navigate to="/profile"/>
+             ) : <LandingPage />
+          } />
+          
+          <Route path="/auth" element={
+            currentUser ? <Navigate to="/" /> : <AuthPage onLogin={handleLogin} />
+          } />
+          
+          <Route path="/help" element={<HelpPage />} />
+
+          <Route path="/client/dashboard" element={
+            currentUser && currentUser.role === UserRole.CLIENT ? (
+              <ClientDashboard 
                 user={currentUser} 
                 jobs={jobs} 
                 applications={applications} 
-                users={users} 
-                reviews={reviews}
-                onPostJob={handlePostJob}
-                onEditJob={handleEditJob}
+                users={users}
+                onPostJob={handlePostJob} 
+                onUpdateJob={handleUpdateJob}
                 onDeleteJob={handleDeleteJob}
-                onAcceptApplication={handleAcceptApplication}
-                onCancelJob={handleCancelJob}
-                onCompleteJob={handleCompleteJob}
-                onRateUser={handleRateUser}
-            /> : <Navigate to="/" />
-        } />
-        <Route path="/maid/dashboard" element={
-            currentUser?.role === UserRole.MAID ?
-            <MaidDashboard 
-               user={currentUser}
-               jobs={jobs}
-               applications={applications}
-               onApply={handleApply}
-            /> : <Navigate to="/" />
-        } />
-        <Route path="/admin/dashboard" element={currentUser?.role === UserRole.ADMIN ? <AdminDashboard /> : <Navigate to="/" />} />
-        <Route path="/chat/:applicationId" element={
-            <ChatPage 
-                currentUser={currentUser} 
-                applications={applications} 
+                onUpdateApplicationStatus={handleUpdateApplicationStatus}
+              />
+            ) : <Navigate to="/" />
+          } />
+
+          <Route path="/maid/dashboard" element={
+            currentUser && currentUser.role === UserRole.MAID ? (
+              <MaidDashboard 
+                user={currentUser} 
                 jobs={jobs} 
-                users={users} 
-                messages={messages} 
-                onSendMessage={handleSendMessage} 
-            />
-        } />
-      </Routes>
+                applications={applications} 
+                onApply={handleApply} 
+              />
+            ) : <Navigate to="/" />
+          } />
+
+          <Route path="/profile" element={
+            currentUser ? <ProfilePage user={currentUser} onUpdate={handleUpdateProfile} /> : <Navigate to="/" />
+          } />
+          
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </div>
     </HashRouter>
   );
 };
