@@ -101,9 +101,13 @@ class DBService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private get<T>(key: string): T {
+  private get<T>(key: string): any[] {
     const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
+    if (data) {
+      return JSON.parse(data);
+    } else {
+      return [];
+    }
   }
 
   private set(key: string, data: any) {

@@ -633,40 +633,232 @@ const FullCalendarSelector: React.FC<{
   selectedDates: string[];
   onChange: (dates: string[]) => void;
 }> = ({ selectedDates, onChange }) => {
-  const [currentDate, setCurrentDate] = useState('');
+  // Helpers for YYYY-MM-DD (local date, stable)
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const toISODate = (d: Date) =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-  const addDate = () => {
-    if (currentDate && !selectedDates.includes(currentDate)) {
-      onChange([...selectedDates, currentDate]);
-      setCurrentDate('');
+  const parseISODate = (iso: string) => {
+    const [y, m, day] = iso.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, day || 1);
+  };
+
+  const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
+  const endOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+  const today = useMemo(() => new Date(), []);
+  const selectedSet = useMemo(() => new Set(selectedDates), [selectedDates]);
+
+  const [monthCursor, setMonthCursor] = useState<Date>(() => startOfMonth(today));
+
+  // Keep cursor reasonable if selected dates change a lot (optional but nice):
+  useEffect(() => {
+    if (selectedDates.length === 0) return;
+    const mostRecent = parseISODate([...selectedDates].sort().slice(-1)[0]);
+    setMonthCursor(startOfMonth(mostRecent));
+  }, []); // run once (don’t constantly jump while user navigates)
+
+  const monthLabel = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
+    return fmt.format(monthCursor);
+  }, [monthCursor]);
+
+  const weeks = useMemo(() => {
+    const first = startOfMonth(monthCursor);
+    const last = endOfMonth(monthCursor);
+
+    // Sunday = 0 ... Saturday = 6 (matches typical calendar)
+    const leading = first.getDay(); // number of cells before day 1
+    const totalDays = last.getDate();
+
+    const cells: Array<{ date: Date; inMonth: boolean }> = [];
+
+    // Leading days (from previous month)
+    for (let i = leading; i > 0; i--) {
+      const d = new Date(first);
+      d.setDate(d.getDate() - i);
+      cells.push({ date: d, inMonth: false });
     }
+
+    // Current month days
+    for (let day = 1; day <= totalDays; day++) {
+      cells.push({ date: new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day), inMonth: true });
+    }
+
+    // Trailing days (to complete weeks)
+    while (cells.length % 7 !== 0) {
+      const d = new Date(last);
+      d.setDate(d.getDate() + (cells.length % 7 === 0 ? 0 : (7 - (cells.length % 7))));
+      // The math above can overshoot; simpler:
+      // We'll just add one day at a time until %7===0
+      break;
+    }
+    while (cells.length % 7 !== 0) {
+      const lastCell = cells[cells.length - 1]?.date ?? last;
+      const d = new Date(lastCell);
+      d.setDate(d.getDate() + 1);
+      cells.push({ date: d, inMonth: false });
+    }
+
+    // Chunk into weeks
+    const chunked: typeof cells[] = [];
+    for (let i = 0; i < cells.length; i += 7) chunked.push(cells.slice(i, i + 7));
+    return chunked;
+  }, [monthCursor]);
+
+  const isSameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+  const toggleDate = (date: Date) => {
+    const iso = toISODate(date);
+    const next = new Set(selectedDates);
+    if (next.has(iso)) next.delete(iso);
+    else next.add(iso);
+    onChange([...next].sort());
   };
 
-  const removeDate = (date: string) => {
-    onChange(selectedDates.filter(d => d !== date));
+  const clearAll = () => onChange([]);
+  const selectWeekdaysThisMonth = () => {
+    const first = startOfMonth(monthCursor);
+    const last = endOfMonth(monthCursor);
+    const next = new Set(selectedDates);
+    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+      const day = d.getDay();
+      if (day !== 0 && day !== 6) next.add(toISODate(d));
+    }
+    onChange([...next].sort());
   };
+
+  const goPrevMonth = () => setMonthCursor(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const goNextMonth = () => setMonthCursor(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+  const goThisMonth = () => setMonthCursor(startOfMonth(today));
+
+  const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div>
-      <label className={LABEL_CLASS}>Work Dates</label>
-      <div className="flex gap-2 mb-2">
-        <input 
-          type="date" 
-          value={currentDate} 
-          onChange={(e) => setCurrentDate(e.target.value)} 
-          className={INPUT_CLASS}
-        />
-        <button type="button" onClick={addDate} className="px-4 py-2 bg-teal-600 text-white rounded-md">Add</button>
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-teal-50 to-white border-b border-gray-200">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Work Dates</p>
+          <h4 className="text-base font-semibold text-gray-900">{monthLabel}</h4>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goPrevMonth}
+            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            aria-label="Previous month"
+            title="Previous month"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={goThisMonth}
+            className="h-9 px-3 inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50"
+            title="Go to current month"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={goNextMonth}
+            className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            aria-label="Next month"
+            title="Next month"
+          >
+            ›
+          </button>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {selectedDates.map(date => (
-          <span key={date} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
-            {date}
-            <button type="button" onClick={() => removeDate(date)} className="ml-1 text-teal-600 hover:text-teal-800">
-              <IconXCircle className="w-4 h-4" />
+
+      <div className="px-4 pt-3 pb-4">
+        <div className="grid grid-cols-7 gap-1 text-xs font-medium text-gray-500 mb-2">
+          {weekdayLabels.map(w => (
+            <div key={w} className="text-center py-1">
+              {w}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-1">
+          {weeks.map((week, wi) => (
+            <div key={wi} className="grid grid-cols-7 gap-1">
+              {week.map(({ date, inMonth }) => {
+                const iso = toISODate(date);
+                const selected = selectedSet.has(iso);
+                const isToday = isSameDay(date, today);
+
+                const base =
+                  'h-10 w-full rounded-lg text-sm flex items-center justify-center transition-colors select-none';
+                const faded = inMonth ? 'text-gray-900' : 'text-gray-400';
+                const ringToday = isToday ? 'ring-2 ring-teal-300 ring-offset-1' : '';
+                const selectedStyle = selected
+                  ? 'bg-teal-600 text-white hover:bg-teal-700'
+                  : 'bg-white hover:bg-gray-50 border border-gray-200';
+
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => toggleDate(date)}
+                    className={`${base} ${faded} ${selectedStyle} ${ringToday}`}
+                    title={iso}
+                  >
+                    {date.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-xs text-gray-500">
+            Selected: <span className="font-semibold text-gray-800">{selectedDates.length}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={selectWeekdaysThisMonth}
+              className="px-3 py-2 rounded-lg text-sm border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            >
+              Weekdays (this month)
             </button>
-          </span>
-        ))}
+            <button
+              type="button"
+              onClick={clearAll}
+              className="px-3 py-2 rounded-lg text-sm border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+              disabled={selectedDates.length === 0}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        {selectedDates.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {selectedDates.map(d => (
+              <span
+                key={d}
+                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-medium bg-teal-50 text-teal-800 border border-teal-100"
+              >
+                {d}
+                <button
+                  type="button"
+                  onClick={() => onChange(selectedDates.filter(x => x !== d))}
+                  className="text-teal-700 hover:text-teal-900"
+                  aria-label={`Remove ${d}`}
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1242,7 +1434,7 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
         <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2 bg-gray-50">
-           <img className="h-56 w-full object-cover sm:h-72 md:h-96 lg:w-full lg:h-full opacity-90" src="https://images.unsplash.com/photo-1581578731117-104f8a3d46a8?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80" alt="Cleaning" />
+           <img className="h-56 w-full object-cover sm:h-72 md:h-96 lg:w-full lg:h-full opacity-90" src="https://images.pexels.com/photos/48889/cleaning-washing-cleanup-the-ilo-48889.jpeg" alt="Cleaning" />
         </div>
       </div>
 
