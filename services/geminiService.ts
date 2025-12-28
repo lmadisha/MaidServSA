@@ -1,6 +1,17 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Create the client lazily so the app doesn't crash when no API key is configured.
+let ai: GoogleGenAI | null = null;
+
+function getAiClient(): GoogleGenAI | null {
+  const apiKey = (process.env as any)?.API_KEY as string | undefined;
+  if (!apiKey) return null;
+
+  if (!ai) {
+    ai = new GoogleGenAI({ apiKey });
+  }
+  return ai;
+}
 
 export const generateJobDescription = async (
   rooms: number,
@@ -9,7 +20,8 @@ export const generateJobDescription = async (
   location: string,
   requirements: string
 ): Promise<string> => {
-  if (!process.env.API_KEY) return "API Key missing. Please provide a description manually.";
+  const client = getAiClient();
+  if (!client) return "API Key missing. Please provide a description manually.";
 
   try {
     const prompt = `
@@ -24,8 +36,8 @@ export const generateJobDescription = async (
       Return plain text only.
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+    const response = await client.models.generateContent({
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 
@@ -40,7 +52,8 @@ export const analyzeCandidateMatch = async (
   jobDescription: string,
   candidateBio: string
 ): Promise<string> => {
-  if (!process.env.API_KEY) return "Match analysis unavailable.";
+  const client = getAiClient();
+  if (!client) return "Match analysis unavailable.";
 
   try {
     const prompt = `
@@ -51,8 +64,8 @@ export const analyzeCandidateMatch = async (
       Give a 1-sentence assessment of why they might be a good fit.
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+    const response = await client.models.generateContent({
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 
