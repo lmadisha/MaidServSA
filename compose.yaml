@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # Match the existing container that mounted the volume at /var/lib/postgresql
+      PGDATA: /var/lib/postgresql
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    ports:
+      - "3000:3000" # Vite
+      - "3001:3001" # API
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: postgres
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # optional but helps file watching on Docker Desktop sometimes
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    # IMPORTANT for Vite inside Docker:
+    # your dev:web script needs --host 0.0.0.0 (see note below)
+    command: sh -c "npm run dev:api & npm run dev:web -- --host 0.0.0.0"
+
+volumes:
+  pg_data:
+    external: true
+    name: 7740c4acaf15530b32c4b58dec1ad937f186cf67777eecf538ebef6fdf7e61d3

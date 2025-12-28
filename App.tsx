@@ -1474,7 +1474,7 @@ const LandingPage: React.FC = () => {
                <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">About MaidServSA</h2>
                <p className="mt-4 max-w-2xl text-xl text-gray-500 mx-auto">Reinventing domestic services with trust and technology.</p>
             </div>
-            
+
             <div className="grid md:grid-cols-2 gap-12 items-center">
                <div>
                   <h3 className="text-2xl font-bold text-gray-900 mb-4">Our Mission</h3>
