@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 const FullCalendarSelector: React.FC<{
   selectedDates: string[];
@@ -74,7 +74,7 @@ const FullCalendarSelector: React.FC<{
   const weeks = useMemo(() => {
     const firstOfMonth = startOfMonth(monthCursor);
     const gridStart = new Date(firstOfMonth);
-    gridStart.setDate(gridStart.getDate() - gridStart.getDay()); // back to Sunday
+    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
 
     const days: Array<{ date: Date; inMonth: boolean }> = [];
     for (let i = 0; i < 42; i++) {
@@ -142,7 +142,7 @@ const FullCalendarSelector: React.FC<{
             aria-label="Previous month"
             title="Previous month"
           >
-            9
+            ‹
           </button>
           <button
             type="button"
@@ -159,7 +159,7 @@ const FullCalendarSelector: React.FC<{
             aria-label="Next month"
             title="Next month"
           >
-            :
+            ›
           </button>
         </div>
       </div>
@@ -255,7 +255,7 @@ const FullCalendarSelector: React.FC<{
                   aria-label={`Remove ${d}`}
                   title="Remove"
                 >
-                  �
+                  ×
                 </button>
               </span>
             ))}

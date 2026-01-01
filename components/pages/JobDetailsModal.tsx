@@ -1,6 +1,6 @@
 import React from 'react';
 import { Job } from '../../types';
-import { IconXCircle, IconMapPin, IconClock } from '../Icons';
+import { IconClock, IconMapPin, IconXCircle } from '../Icons';
 
 const JobDetailsModal: React.FC<{
   job: Job | null;
@@ -25,7 +25,6 @@ const JobDetailsModal: React.FC<{
             </div>
 
             <div className="space-y-4">
-              {/* Key Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-lg">
                 <div>
                   <p className="text-xs text-gray-500">Price</p>
@@ -38,7 +37,7 @@ const JobDetailsModal: React.FC<{
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Size</p>
-                  <p className="font-semibold">{job.areaSize} m�</p>
+                  <p className="font-semibold">{job.areaSize} m²</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Rooms</p>
@@ -52,7 +51,6 @@ const JobDetailsModal: React.FC<{
                 </div>
               </div>
 
-              {/* Location & Time */}
               <div className="flex flex-col sm:flex-row gap-4 text-sm text-gray-600 border-b border-gray-100 pb-4">
                 <div className="flex items-center">
                   <IconMapPin className="w-4 h-4 mr-2 text-gray-400" /> {job.location}
@@ -63,7 +61,6 @@ const JobDetailsModal: React.FC<{
                 </div>
               </div>
 
-              {/* Description */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-900 mb-2">Description</h4>
                 <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
@@ -71,7 +68,6 @@ const JobDetailsModal: React.FC<{
                 </p>
               </div>
 
-              {/* Dates */}
               {job.workDates && job.workDates.length > 0 && (
                 <div>
                   <h4 className="text-sm font-semibold text-gray-900 mb-2">
