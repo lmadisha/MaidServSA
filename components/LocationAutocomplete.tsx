@@ -2,14 +2,52 @@ import React, { useState, useEffect, useRef } from 'react';
 import { IconMapPin } from './Icons';
 
 const SA_LOCATIONS = [
-  "Cape Town City Centre", "Sea Point, Cape Town", "Green Point, Cape Town", "Camps Bay, Cape Town", "Clifton, Cape Town", 
-  "Gardens, Cape Town", "Vredehoek, Cape Town", "Woodstock, Cape Town", "Observatory, Cape Town", "Claremont, Cape Town", 
-  "Newlands, Cape Town", "Rondebosch, Cape Town", "Constantia, Cape Town", "Wynberg, Cape Town", "Hout Bay, Cape Town", "Bloubergstrand, Cape Town", "Durbanville, Cape Town",
-  "Johannesburg Central", "Sandton, Johannesburg", "Rosebank, Johannesburg", "Bryanston, Johannesburg", "Fourways, Johannesburg", 
-  "Randburg, Johannesburg", "Midrand, Johannesburg", "Soweto, Johannesburg", "Melville, Johannesburg", "Parkhurst, Johannesburg", "Bedfordview, Johannesburg",
-  "Pretoria Central", "Centurion, Pretoria", "Hatfield, Pretoria", "Menlyn, Pretoria", "Lynnwood, Pretoria",
-  "Durban Central", "Umhlanga, Durban", "Ballito, Durban", "Morningside, Durban", "Berea, Durban",
-  "Port Elizabeth", "East London", "Bloemfontein", "Stellenbosch", "Somerset West", "George", "Knysna", "Plettenberg Bay"
+  'Cape Town City Centre',
+  'Sea Point, Cape Town',
+  'Green Point, Cape Town',
+  'Camps Bay, Cape Town',
+  'Clifton, Cape Town',
+  'Gardens, Cape Town',
+  'Vredehoek, Cape Town',
+  'Woodstock, Cape Town',
+  'Observatory, Cape Town',
+  'Claremont, Cape Town',
+  'Newlands, Cape Town',
+  'Rondebosch, Cape Town',
+  'Constantia, Cape Town',
+  'Wynberg, Cape Town',
+  'Hout Bay, Cape Town',
+  'Bloubergstrand, Cape Town',
+  'Durbanville, Cape Town',
+  'Johannesburg Central',
+  'Sandton, Johannesburg',
+  'Rosebank, Johannesburg',
+  'Bryanston, Johannesburg',
+  'Fourways, Johannesburg',
+  'Randburg, Johannesburg',
+  'Midrand, Johannesburg',
+  'Soweto, Johannesburg',
+  'Melville, Johannesburg',
+  'Parkhurst, Johannesburg',
+  'Bedfordview, Johannesburg',
+  'Pretoria Central',
+  'Centurion, Pretoria',
+  'Hatfield, Pretoria',
+  'Menlyn, Pretoria',
+  'Lynnwood, Pretoria',
+  'Durban Central',
+  'Umhlanga, Durban',
+  'Ballito, Durban',
+  'Morningside, Durban',
+  'Berea, Durban',
+  'Port Elizabeth',
+  'East London',
+  'Bloemfontein',
+  'Stellenbosch',
+  'Somerset West',
+  'George',
+  'Knysna',
+  'Plettenberg Bay',
 ];
 
 interface Props {
@@ -21,7 +59,14 @@ interface Props {
   name?: string;
 }
 
-export const LocationAutocomplete: React.FC<Props> = ({ value, onChange, placeholder, className, required, name }) => {
+export const LocationAutocomplete: React.FC<Props> = ({
+  value,
+  onChange,
+  placeholder,
+  className,
+  required,
+  name,
+}) => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [show, setShow] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -32,15 +77,15 @@ export const LocationAutocomplete: React.FC<Props> = ({ value, onChange, placeho
         setShow(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     onChange(val);
     if (val.length > 0) {
-      const filtered = SA_LOCATIONS.filter(loc => loc.toLowerCase().includes(val.toLowerCase()));
+      const filtered = SA_LOCATIONS.filter((loc) => loc.toLowerCase().includes(val.toLowerCase()));
       setSuggestions(filtered);
       setShow(true);
     } else {
@@ -55,11 +100,13 @@ export const LocationAutocomplete: React.FC<Props> = ({ value, onChange, placeho
 
   const handleFocus = () => {
     if (value.length > 0) {
-      const filtered = SA_LOCATIONS.filter(loc => loc.toLowerCase().includes(value.toLowerCase()));
+      const filtered = SA_LOCATIONS.filter((loc) =>
+        loc.toLowerCase().includes(value.toLowerCase())
+      );
       setSuggestions(filtered);
       setShow(true);
     }
-  }
+  };
 
   return (
     <div className="relative w-full" ref={wrapperRef}>

@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from '@google/genai';
 
 // Create the client lazily so the app doesn't crash when no API key is configured.
 let ai: GoogleGenAI | null = null;
@@ -21,7 +21,7 @@ export const generateJobDescription = async (
   requirements: string
 ): Promise<string> => {
   const client = getAiClient();
-  if (!client) return "API Key missing. Please provide a description manually.";
+  if (!client) return 'API Key missing. Please provide a description manually.';
 
   try {
     const prompt = `
@@ -37,14 +37,14 @@ export const generateJobDescription = async (
     `;
 
     const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
-    return response.text || "Could not generate description.";
+    return response.text || 'Could not generate description.';
   } catch (error) {
-    console.error("Error generating description:", error);
-    return "Failed to generate description due to an error.";
+    console.error('Error generating description:', error);
+    return 'Failed to generate description due to an error.';
   }
 };
 
@@ -53,7 +53,7 @@ export const analyzeCandidateMatch = async (
   candidateBio: string
 ): Promise<string> => {
   const client = getAiClient();
-  if (!client) return "Match analysis unavailable.";
+  if (!client) return 'Match analysis unavailable.';
 
   try {
     const prompt = `
@@ -65,13 +65,13 @@ export const analyzeCandidateMatch = async (
     `;
 
     const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
-    return response.text || "Analysis unavailable.";
+    return response.text || 'Analysis unavailable.';
   } catch (error) {
-    console.error("Error analyzing match:", error);
-    return "Analysis failed.";
+    console.error('Error analyzing match:', error);
+    return 'Analysis failed.';
   }
 };

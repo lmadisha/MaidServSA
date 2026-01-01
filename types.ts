@@ -40,7 +40,7 @@ export interface User {
   bio?: string;
   location?: string;
   isSuspended?: boolean;
-  
+
   // Personal Details
   firstName?: string;
   middleName?: string;
@@ -50,7 +50,7 @@ export interface User {
   placeOfBirth?: string;
   nationality?: string;
   residencyStatus?: string; // New field for visa/citizenship status
-  
+
   // Extended Profile Details
   languages?: string;
   educationLevel?: string;
@@ -102,12 +102,12 @@ export interface Job {
   bathrooms: number;
   images: string[];
   assignedMaidId?: string;
-  
+
   // New Fields
   paymentType: PaymentType;
   startTime: string; // HH:mm
-  endTime: string;   // HH:mm
-  duration: number;  // Hours
+  endTime: string; // HH:mm
+  duration: number; // Hours
   workDates: string[]; // Array of ISO date strings for all work days
   history: JobHistoryEntry[]; // Log of status changes
 }
