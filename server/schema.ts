@@ -1,14 +1,16 @@
 export const POSTGRES_SCHEMA_QUERIES: string[] = [
-    `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`,
-    `CREATE TYPE IF NOT EXISTS user_role AS ENUM ('CLIENT', 'MAID', 'ADMIN');`,
-    `CREATE TYPE IF NOT EXISTS job_status AS ENUM ('OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');`,
-    `CREATE TYPE IF NOT EXISTS payment_type AS ENUM ('FIXED', 'HOURLY');`,
-    `CREATE TYPE IF NOT EXISTS application_status AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED');`,
+  `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`,
+  `CREATE TYPE IF NOT EXISTS user_role AS ENUM ('CLIENT', 'MAID', 'ADMIN');`,
+  `CREATE TYPE IF NOT EXISTS job_status AS ENUM ('OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');`,
+  `CREATE TYPE IF NOT EXISTS payment_type AS ENUM ('FIXED', 'HOURLY');`,
+  `CREATE TYPE IF NOT EXISTS application_status AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED');`,
 
-    `CREATE TABLE IF NOT EXISTS users (
+  `CREATE TABLE IF NOT EXISTS users
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
     role user_role NOT NULL,
     avatar TEXT,
     rating NUMERIC(3,2) DEFAULT 0,
@@ -30,10 +32,16 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     school TEXT,
     cv_file_name TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+        updated_at TIMESTAMPTZ DEFAULT NOW
+     (
+     ),
+        password_changed_at TIMESTAMPTZ,
+        password_reset_token_hash TEXT,
+        password_reset_expires_at TIMESTAMPTZ
   );`,
 
-    `CREATE TABLE IF NOT EXISTS jobs (
+  `CREATE TABLE IF NOT EXISTS jobs
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     client_id UUID REFERENCES users(id),
     title TEXT NOT NULL,
@@ -57,7 +65,8 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );`,
 
-    `CREATE TABLE IF NOT EXISTS job_history (
+  `CREATE TABLE IF NOT EXISTS job_history
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
     status job_status NOT NULL,
@@ -65,7 +74,8 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     timestamp TIMESTAMPTZ DEFAULT NOW()
   );`,
 
-    `CREATE TABLE IF NOT EXISTS applications (
+  `CREATE TABLE IF NOT EXISTS applications
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
     maid_id UUID REFERENCES users(id),
@@ -75,7 +85,8 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );`,
 
-    `CREATE TABLE IF NOT EXISTS messages (
+  `CREATE TABLE IF NOT EXISTS messages
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
     sender_id UUID REFERENCES users(id),
@@ -84,7 +95,8 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     timestamp TIMESTAMPTZ DEFAULT NOW()
   );`,
 
-    `CREATE TABLE IF NOT EXISTS reviews (
+  `CREATE TABLE IF NOT EXISTS reviews
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
     reviewer_id UUID REFERENCES users(id),
@@ -94,7 +106,8 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     created_at TIMESTAMPTZ DEFAULT NOW()
   );`,
 
-    `CREATE TABLE IF NOT EXISTS notifications (
+  `CREATE TABLE IF NOT EXISTS notifications
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id),
     message TEXT NOT NULL,
@@ -103,7 +116,8 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     timestamp TIMESTAMPTZ DEFAULT NOW()
   );`,
 
-    `CREATE TABLE IF NOT EXISTS experience_answers (
+  `CREATE TABLE IF NOT EXISTS experience_answers
+    (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     question_id TEXT NOT NULL,
@@ -112,9 +126,9 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     created_at TIMESTAMPTZ DEFAULT NOW()
   );`,
 
-    `CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);`,
-    `CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);`,
-    `CREATE INDEX IF NOT EXISTS idx_messages_job_id ON messages(job_id);`,
-    `CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON reviews(reviewee_id);`,
-    `CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);`,
+  `CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_messages_job_id ON messages(job_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON reviews(reviewee_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);`,
 ];
