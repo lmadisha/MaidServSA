@@ -2,18 +2,35 @@ import type { Application, Job, Notification, User } from '../types';
 
 const API_BASE = '/api';
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    ...init,
-  });
+async function api<T>(path: string, init: RequestInit = {}, timeoutMs = 15000): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`API ${res.status} ${res.statusText}: ${text}`);
+  const hasBody = init.body != null;
+
+  // Use Headers so it works whether init.headers is an object, array, or Headers instance
+  const headers = new Headers(init.headers);
+  headers.set('Accept', 'application/json');
+  if (hasBody && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`API ${res.status} ${res.statusText}: ${text}`);
+    }
+
+    if (res.status === 204) return undefined as T;
+
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return (await res.json()) as T;
 }
 
 class DBService {
@@ -45,7 +62,10 @@ class DBService {
   }
 
   saveApplication(app: Application): Promise<Application> {
-    return api<Application>(`/applications/${app.id}`, { method: 'PUT', body: JSON.stringify(app) });
+    return api<Application>(`/applications/${app.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(app),
+    });
   }
 
   // --- NOTIFICATIONS ---
@@ -54,11 +74,17 @@ class DBService {
   }
 
   saveNotification(note: Notification): Promise<Notification> {
-    return api<Notification>(`/notifications/${note.id}`, { method: 'PUT', body: JSON.stringify(note) });
+    return api<Notification>(`/notifications/${note.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(note),
+    });
   }
 
   markNotificationsRead(userId: string): Promise<void> {
-    return api<void>(`/notifications/mark-read`, { method: 'POST', body: JSON.stringify({ userId }) });
+    return api<void>(`/notifications/mark-read`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
   }
 }
 
