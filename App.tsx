@@ -57,9 +57,9 @@ const App: React.FC = () => {
       experienceAnswers: [],
     };
 
-    const saved = await db.saveUser(newUser);
-    setUsers((prev) => [...prev, saved]);
-    setCurrentUser(saved);
+    const created = await db.createUser(newUser);
+    setUsers((prev) => [...prev, created]);
+    setCurrentUser(created);
   };
 
   const handleLogout = () => {

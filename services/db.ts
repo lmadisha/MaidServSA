@@ -1,6 +1,6 @@
 import type { Application, Job, Notification, User } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = 'http://localhost:3001/api';
 
 async function api<T>(path: string, init: RequestInit = {}, timeoutMs = 15000): Promise<T> {
   const controller = new AbortController();
@@ -33,6 +33,8 @@ async function api<T>(path: string, init: RequestInit = {}, timeoutMs = 15000): 
   }
 }
 
+export type CreateUserInput = Omit<User, 'id'>;
+
 class DBService {
   // --- USERS ---
   getUsers(): Promise<User[]> {
@@ -41,6 +43,10 @@ class DBService {
 
   saveUser(user: User): Promise<User> {
     return api<User>(`/users/${user.id}`, { method: 'PUT', body: JSON.stringify(user) });
+  }
+
+  createUser(user: CreateUserInput): Promise<User> {
+    return api<User>(`/users`, { method: 'POST', body: JSON.stringify(user) });
   }
 
   // --- JOBS ---

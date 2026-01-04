@@ -1,35 +1,93 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../../types';
 import { IconSparkles } from '../Icons';
+import FormSelect from './FormSelect';
+import { INPUT_CLASS, LABEL_CLASS } from './formStyles';
 
-const AuthPage: React.FC<{
-  onLogin: (email: string) => void;
-  onSignUp: (userData: Partial<User>) => void;
-}> = ({ onLogin, onSignUp }) => {
-  const [isLogin, setIsLogin] = useState(true);
+type Props = {
+  onLogin: (email: string, password: string) => void | Promise<void>;
+  onSignUp: (userData: Partial<User>, password: string) => void | Promise<void>;
+};
+
+const DEMO_PASSWORD = 'Password123!';
+
+const AuthPage: React.FC<Props> = ({ onLogin, onSignUp }) => {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // shared
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState<UserRole>(UserRole.CLIENT);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLogin) {
-      onLogin(email);
-    } else {
-      onSignUp({
-        email,
-        name,
-        role,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-      });
+  // signup-only
+  const [role, setRole] = useState<UserRole>(UserRole.CLIENT);
+  const [firstName, setFirstName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const resetErrors = () => setError(null);
+
+  const safeAwait = async (fn: () => void | Promise<void>) => {
+    try {
+      setLoading(true);
+      resetErrors();
+      await Promise.resolve(fn());
+    } catch (e: any) {
+      setError(e?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDemoLogin = (type: 'client' | 'maid' | 'admin') => {
-    if (type === 'client') onLogin('sarah@example.com');
-    else if (type === 'maid') onLogin('martha@example.com');
-    else onLogin('admin@maidservsa.com');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email.trim() || !password) {
+      setError('Please enter email + password.');
+      return;
+    }
+
+    if (mode === 'signin') {
+      await safeAwait(() => onLogin(email.trim(), password));
+      return;
+    }
+
+    // signup validations
+    const fullName = `${firstName} ${surname}`.trim();
+    if (!fullName) {
+      setError('Please enter your name.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=0D9488&color=fff`;
+
+    const userData: Partial<User> = {
+      name: fullName,
+      firstName: firstName.trim(),
+      surname: surname.trim(),
+      email: email.trim(),
+      role,
+      avatar,
+      rating: 0,
+      ratingCount: 0,
+    };
+
+    await safeAwait(() => onSignUp(userData, password));
+  };
+
+  const demoLogin = async (demoEmail: string) => {
+    setEmail(demoEmail);
+    setPassword(DEMO_PASSWORD);
+    await safeAwait(() => onLogin(demoEmail, DEMO_PASSWORD));
   };
 
   return (
@@ -39,80 +97,130 @@ const AuthPage: React.FC<{
           <div className="mx-auto h-12 w-12 text-teal-600 flex justify-center">
             <IconSparkles className="w-12 h-12" />
           </div>
+
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            {isLogin ? 'Sign in to your account' : 'Create your account'}
+            {mode === 'signin' ? 'Sign in' : 'Create your account'}
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            {isLogin ? "Don't have an account? " : 'Already have an account? '}
+
+          <div className="mt-4 flex justify-center gap-2">
             <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="font-medium text-teal-600 hover:text-teal-500 transition-colors"
+              type="button"
+              onClick={() => {
+                setMode('signin');
+                setError(null);
+              }}
+              className={`px-4 py-2 rounded-md text-sm font-medium border ${
+                mode === 'signin'
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white text-gray-700 border-gray-300'
+              }`}
             >
-              {isLogin ? 'Sign up now' : 'Sign in'}
+              Sign in
             </button>
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            {!isLogin && (
-              <div>
-                <label htmlFor="full-name" className="sr-only">
-                  Full Name
-                </label>
-                <input
-                  id="full-name"
-                  type="text"
-                  required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm"
-                  placeholder="Full Name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-            )}
-            <div className={isLogin ? '' : 'pt-px'}>
-              <label htmlFor="email-address" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email-address"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className={`appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 ${
-                  isLogin ? 'rounded-t-md' : ''
-                } focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm`}
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signup');
+                setError(null);
+              }}
+              className={`px-4 py-2 rounded-md text-sm font-medium border ${
+                mode === 'signup'
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white text-gray-700 border-gray-300'
+              }`}
+            >
+              Sign up
+            </button>
+          </div>
+
+          {error && (
+            <div className="mt-4 p-3 rounded-md bg-red-50 text-red-700 text-sm border border-red-100">
+              {error}
             </div>
-            <div>
-              <label htmlFor="role" className="sr-only">
-                Role
-              </label>
-              <select
-                id="role"
-                name="role"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm"
+          )}
+        </div>
+
+        <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
+          {mode === 'signup' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={LABEL_CLASS}>First name</label>
+                  <input
+                    className={INPUT_CLASS}
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Surname</label>
+                  <input
+                    className={INPUT_CLASS}
+                    value={surname}
+                    onChange={(e) => setSurname(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <FormSelect
+                label="Account type"
                 value={role}
                 onChange={(e) => setRole(e.target.value as UserRole)}
-              >
-                <option value={UserRole.CLIENT}>I want to hire help (Client)</option>
-                <option value={UserRole.MAID}>I am looking for work (Maid)</option>
-              </select>
-            </div>
+                options={[
+                  { value: UserRole.CLIENT, label: 'Client' },
+                  { value: UserRole.MAID, label: 'Maid / Cleaner' },
+                ]}
+              />
+            </>
+          )}
+
+          <div>
+            <label className={LABEL_CLASS}>Email</label>
+            <input
+              type="email"
+              autoComplete="email"
+              className={INPUT_CLASS}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </div>
 
           <div>
-            <button
-              type="submit"
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-            >
-              {isLogin ? 'Sign in' : 'Sign up'}
-            </button>
+            <label className={LABEL_CLASS}>Password</label>
+            <input
+              type="password"
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              className={INPUT_CLASS}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </div>
+
+          {mode === 'signup' && (
+            <div>
+              <label className={LABEL_CLASS}>Confirm password</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                className={INPUT_CLASS}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-60"
+          >
+            {loading ? 'Working...' : mode === 'signin' ? 'Sign in' : 'Create account'}
+          </button>
         </form>
 
         <div className="mt-6">
@@ -121,29 +229,37 @@ const AuthPage: React.FC<{
               <div className="w-full border-t border-gray-300"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-50 text-gray-500">Or use demo accounts</span>
+              <span className="px-2 bg-gray-50 text-gray-500">Demo accounts</span>
             </div>
           </div>
+
           <div className="mt-6 grid grid-cols-3 gap-3">
             <button
-              onClick={() => handleDemoLogin('client')}
+              type="button"
+              onClick={() => demoLogin('sarah@example.com')}
               className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
             >
               Client
             </button>
             <button
-              onClick={() => handleDemoLogin('maid')}
+              type="button"
+              onClick={() => demoLogin('martha@example.com')}
               className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
             >
               Maid
             </button>
             <button
-              onClick={() => handleDemoLogin('admin')}
+              type="button"
+              onClick={() => demoLogin('admin@maidservsa.com')}
               className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
             >
               Admin
             </button>
           </div>
+
+          <p className="mt-3 text-xs text-gray-500 text-center">
+            Demo password: <span className="font-mono">{DEMO_PASSWORD}</span>
+          </p>
         </div>
       </div>
     </div>
