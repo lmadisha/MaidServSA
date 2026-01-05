@@ -38,28 +38,40 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSignUp = async (userData: Partial<User>) => {
+  const handleSignUp = async (userData: Partial<User>, password: string) => {
+    // 1. Check local state (optional but good)
     if (users.some((u) => u.email.toLowerCase() === userData.email?.toLowerCase())) {
       alert('An account with this email already exists.');
       return;
     }
 
-    const newUser: User = {
-      rating: 0,
-      ratingCount: 0,
-      id: `user_${Date.now()}`,
-      email: userData.email!,
-      name: userData.name!,
-      role: userData.role!,
-      avatar: userData.avatar!,
-      firstName: userData.name?.split(' ')[0] || '',
-      surname: userData.name?.split(' ').slice(1).join(' ') || '',
-      experienceAnswers: [],
-    };
+    try {
+      const newUser: User = {
+        rating: 0,
+        ratingCount: 0,
+        id: crypto.randomUUID(),
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+        avatar: userData.avatar,
+        firstName: userData.name.split(' ')[0] || '',
+        surname: userData.surname.split(' ')[0] || '',
+        experienceAnswers: [],
+      };
 
-    const created = await db.createUser(newUser);
-    setUsers((prev) => [...prev, created]);
-    setCurrentUser(created);
+      // 3. Call the correct register endpoint with the password
+      const created = await db.register(newUser, password);
+
+      console.log(created);
+
+      // 4. Update local state
+      setUsers((prev) => [...prev, created]);
+      setCurrentUser(created);
+    } catch (error: any) {
+      // This will catch the "Email already exists" from the server too
+      alert(error.message || 'Failed to create account');
+      throw error; // Re-throw so AuthPage shows the error message
+    }
   };
 
   const handleLogout = () => {
@@ -90,7 +102,7 @@ const App: React.FC = () => {
   const handleApply = async (jobId: string, message: string) => {
     if (!currentUser) return;
     const newApp: Application = {
-      id: `app_${Date.now()}`,
+      id: crypto.randomUUID(),
       jobId,
       maidId: currentUser.id,
       status: ApplicationStatus.PENDING,
@@ -103,7 +115,7 @@ const App: React.FC = () => {
     const job = jobs.find((j) => j.id === jobId);
     if (job) {
       const note: Notification = {
-        id: `not_${Date.now()}`,
+        id: crypto.randomUUID(),
         userId: job.clientId,
         message: `New application from ${currentUser.name} for ${job.title}`,
         type: 'info',
@@ -123,7 +135,7 @@ const App: React.FC = () => {
       setApplications((prev) => prev.map((a) => (a.id === appId ? updated : a)));
 
       const note: Notification = {
-        id: `not_${Date.now()}`,
+        id: crypto.randomUUID(),
         userId: app.maidId,
         message: `Your application for job ID ${app.jobId} was ${status.toLowerCase()}`,
         type: status === ApplicationStatus.ACCEPTED ? 'success' : 'error',

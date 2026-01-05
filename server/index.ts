@@ -171,6 +171,7 @@ app.post(
   '/api/auth/register',
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
+    console.log('[API] ' + JSON.stringify(body, null, 2));
     const email = String(body.email ?? '')
       .trim()
       .toLowerCase();
@@ -199,8 +200,7 @@ app.post(
                              rating, rating_count, bio, location,
                              first_name, middle_name, surname,
                              date_of_birth, place_of_birth, nationality, residency_status, address,
-                             cv_file_name,
-                             password_hash, password_changed_at)
+                             cv_file_name, password_hash, password_changed_at)
           VALUES ($1, $2, $3, $4, $5,
                   $6, $7, $8, $9,
                   $10, $11, $12,
@@ -277,7 +277,7 @@ app.post(
         return res.status(401).json({ error: 'Invalid credentials.' });
       }
 
-      // ✅ return safe user only
+      // return safe user only
       return res.json(mapUser(row));
     } finally {
       client.release();

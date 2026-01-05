@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../../types';
-import { IconSparkles } from '../Icons';
+import { IconSparkles, IconEye, IconEyeOff } from '../Icons';
 import FormSelect from './FormSelect';
 import { INPUT_CLASS, LABEL_CLASS } from './formStyles';
 
@@ -25,6 +25,10 @@ const AuthPage: React.FC<Props> = ({ onLogin, onSignUp }) => {
   const [firstName, setFirstName] = useState('');
   const [surname, setSurname] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // showPasswords
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const resetErrors = () => setError(null);
 
@@ -190,27 +194,47 @@ const AuthPage: React.FC<Props> = ({ onLogin, onSignUp }) => {
 
           <div>
             <label className={LABEL_CLASS}>Password</label>
-            <input
-              type="password"
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              className={INPUT_CLASS}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <div className="relative">
+              {' '}
+              {/* Added relative container */}
+              <input
+                type={showPassword ? 'text' : 'password'} // Dynamic type
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                className={`${INPUT_CLASS} pr-10`} // Added right padding for icon
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-teal-600"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <IconEyeOff /> : <IconEye />}
+              </button>
+            </div>
           </div>
 
           {mode === 'signup' && (
             <div>
               <label className={LABEL_CLASS}>Confirm password</label>
-              <input
-                type="password"
-                autoComplete="new-password"
-                className={INPUT_CLASS}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className={`${INPUT_CLASS} pr-10`}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-teal-600"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? <IconEyeOff /> : <IconEye />}
+                </button>
+              </div>
             </div>
           )}
 
