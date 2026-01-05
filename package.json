@@ -4,28 +4,36 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev:api": "PORT=3001 tsx watch server/index.ts",
+    "dev:api": "cross-env PORT=3001 tsx watch server/index.ts",
     "dev:web": "vite --config server/vite_config_with_proxy.ts",
-    "dev": "concurrently -k -n API,WEB \"npm:dev:api\" \"npm:dev:web\"",
+    "dev": "concurrently -k --handle-input -n API,WEB -c \"magenta,cyan\" \"npm:dev:api\" \"npm:dev:web\"",
     "build": "vite build",
     "preview": "vite preview",
     "db:test": "node --loader ts-node/esm ./server/db.ts",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "nuke": "npx kill-port 3001 && npx kill-port 5173"
   },
   "dependencies": {
     "@google/genai": "^1.31.0",
     "argon2": "^0.44.0",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "pg": "^8.13.3",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "react-router-dom": "^7.10.1"
+    "react-router-dom": "^7.10.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "kill-port": "^2.0.1",
+    "nodemon": "^3.1.11",
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
