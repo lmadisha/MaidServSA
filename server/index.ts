@@ -1,414 +1,1049 @@
-import express from 'express';
+import 'dotenv/config';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
-import { pool } from './db';
-
-const PORT = Number(process.env.PORT || 3001);
+import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4, v5 as uuidv5, validate as uuidValidate } from 'uuid';
+import type { PoolClient } from 'pg';
+import { pool, testDbConnection } from './db';
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// Small helper so async route errors always reach the error middleware
+/**
+ * If you're using deterministic UUIDs for seeds (like uuid_generate_v5 in SQL),
+ * keep this namespace the same one you used there.
+ */
+const UUID_NAMESPACE = process.env.UUID_NAMESPACE ?? '00000000-0000-0000-0000-000000000000';
+
+const PORT = Number(process.env.PORT ?? 3001);
+
+// --- middleware ---
+app.use(
+  cors({
+    origin: true, // dev-friendly; lock this down for prod
+    credentials: true,
+  })
+);
+app.use(express.json({ limit: '2mb' }));
+
+// --- helpers ---
 const asyncHandler =
-  (fn: (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<any>) =>
-  (req: express.Request, res: express.Response, next: express.NextFunction) =>
+  (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
+  (req: Request, res: Response, next: NextFunction) =>
     Promise.resolve(fn(req, res, next)).catch(next);
 
-// Basic DB + API health check (useful for Docker / deploys)
-app.get(
-  '/healthz',
-  asyncHandler(async (_req, res) => {
-    await pool.query('SELECT 1');
-    res.json({ ok: true });
-  }),
+function toUuid(idOrSlug: string): string {
+  if (!idOrSlug) throw new Error('Missing id');
+  return uuidValidate(idOrSlug) ? idOrSlug : uuidv5(idOrSlug, UUID_NAMESPACE);
+}
+
+function toNumber(v: any): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toISODateOnly(v: any): string | null {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString().split('T')[0];
+  // pg often returns DATE as string already
+  if (typeof v === 'string') return v.length >= 10 ? v.slice(0, 10) : v;
+  return null;
+}
+
+async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const out = await fn(client);
+    await client.query('COMMIT');
+    return out;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// --- mappers (NO password fields) ---
+const USER_PUBLIC_SELECT = `
+  id, name, email, role, avatar,
+  rating, rating_count, bio, location,
+  first_name, middle_name, surname,
+  date_of_birth, place_of_birth,
+  nationality, residency_status, address,
+  cv_file_name, created_at, updated_at
+`;
+
+function mapUser(row: any) {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    avatar: row.avatar,
+    rating: toNumber(row.rating) ?? 0,
+    ratingCount: row.rating_count ?? 0,
+    bio: row.bio ?? null,
+    location: row.location ?? null,
+    firstName: row.first_name ?? null,
+    middleName: row.middle_name ?? null,
+    surname: row.surname ?? null,
+    dateOfBirth: toISODateOnly(row.date_of_birth),
+    placeOfBirth: row.place_of_birth ?? null,
+    nationality: row.nationality ?? null,
+    residencyStatus: row.residency_status ?? null,
+    address: row.address ?? null,
+    cvFileName: row.cv_file_name ?? null,
+    createdAt: row.created_at?.toISOString?.() ?? null,
+    updatedAt: row.updated_at?.toISOString?.() ?? null,
+  };
+}
+
+const JOB_SELECT = `
+  id, client_id, assigned_maid_id,
+  title, description, location,
+  area_size, price, currency,
+  date, status, rooms, bathrooms,
+  images, payment_type, start_time, end_time,
+  duration, work_dates, created_at, updated_at
+`;
+
+function mapJob(row: any) {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    assignedMaidId: row.assigned_maid_id ?? null,
+    title: row.title,
+    description: row.description ?? '',
+    location: row.location ?? '',
+    areaSize: toNumber(row.area_size) ?? 0,
+    price: toNumber(row.price) ?? 0,
+    currency: row.currency ?? 'R',
+    date: toISODateOnly(row.date) ?? '',
+    status: row.status,
+    rooms: row.rooms ?? 0,
+    bathrooms: row.bathrooms ?? 0,
+    images: row.images ?? [],
+    paymentType: row.payment_type,
+    startTime: row.start_time ?? null,
+    endTime: row.end_time ?? null,
+    duration: row.duration ?? null,
+    workDates: row.work_dates ?? [],
+    createdAt: row.created_at?.toISOString?.() ?? null,
+    updatedAt: row.updated_at?.toISOString?.() ?? null,
+  };
+}
+
+function mapApplication(row: any) {
+  return {
+    id: row.id,
+    jobId: row.job_id,
+    maidId: row.maid_id,
+    status: row.status,
+    message: row.message ?? '',
+    appliedAt: row.applied_at?.toISOString?.() ?? null,
+    updatedAt: row.updated_at?.toISOString?.() ?? null,
+  };
+}
+
+function mapNotification(row: any) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    message: row.message,
+    type: row.type,
+    read: !!row.read,
+    timestamp: row.timestamp?.toISOString?.() ?? null,
+  };
+}
+
+// --- health ---
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+/**
+ * AUTH
+ * Minimal: register + login. No JWT/session yet.
+ * (You can add JWT later once your UI flow is stable.)
+ */
+app.post(
+  '/api/auth/register',
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    console.log('[API] ' + JSON.stringify(body, null, 2));
+    const email = String(body.email ?? '')
+      .trim()
+      .toLowerCase();
+    const password = String(body.password ?? '');
+    const role = String(body.role ?? 'CLIENT').toUpperCase();
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+
+    const created = await withTx(async (client) => {
+      const existing = await client.query('SELECT id FROM users WHERE email = $1;', [email]);
+      if (existing.rowCount) {
+        return null;
+      }
+
+      const userId = body.id ? toUuid(String(body.id)) : uuidv4();
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      const { rows } = await client.query(
+        `
+          INSERT INTO users (id, name, email, role, avatar,
+                             rating, rating_count, bio, location,
+                             first_name, middle_name, surname,
+                             date_of_birth, place_of_birth, nationality, residency_status, address,
+                             cv_file_name, password_hash, password_changed_at)
+          VALUES ($1, $2, $3, $4, $5,
+                  $6, $7, $8, $9,
+                  $10, $11, $12,
+                  $13, $14, $15, $16, $17,
+                  $18,
+                  $19, NOW())
+            RETURNING ${USER_PUBLIC_SELECT};
+        `,
+        [
+          userId,
+          body.name ?? `${body.firstName ?? ''} ${body.surname ?? ''}`.trim() ?? 'User',
+          email,
+          role,
+          body.avatar ?? null,
+          body.rating ?? 0,
+          body.ratingCount ?? 0,
+          body.bio ?? null,
+          body.location ?? null,
+          body.firstName ?? null,
+          body.middleName ?? null,
+          body.surname ?? null,
+          body.dateOfBirth ?? null,
+          body.placeOfBirth ?? null,
+          body.nationality ?? null,
+          body.residencyStatus ?? null,
+          body.address ?? null,
+          body.cvFileName ?? null,
+          passwordHash,
+        ]
+      );
+
+      return mapUser(rows[0]);
+    });
+
+    if (!created) {
+      return res.status(409).json({ error: 'Email already exists.' });
+    }
+
+    res.status(201).json(created);
+  })
 );
 
+app.post(
+  '/api/auth/login',
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    const email = String(body.email ?? '')
+      .trim()
+      .toLowerCase();
+    const password = String(body.password ?? '');
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      const { rows } = await client.query(
+        `
+          SELECT ${USER_PUBLIC_SELECT}, password_hash
+          FROM users
+          WHERE email = $1 LIMIT 1;
+        `,
+        [email]
+      );
+
+      if (!rows.length) {
+        return res.status(401).json({ error: 'Invalid credentials.' });
+      }
+
+      const row = rows[0];
+      const ok = await bcrypt.compare(password, row.password_hash);
+      if (!ok) {
+        return res.status(401).json({ error: 'Invalid credentials.' });
+      }
+
+      // return safe user only
+      return res.json(mapUser(row));
+    } finally {
+      client.release();
+    }
+  })
+);
 
 // --- USERS ---
-app.get('/api/users', asyncHandler(async (_req, res) => {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query('SELECT * FROM users ORDER BY created_at DESC;');
-    const userIds = rows.map(r => r.id);
-    const { rows: expRows } = userIds.length
-      ? await client.query(
-          'SELECT user_id, question_id, question, answer FROM experience_answers WHERE user_id = ANY($1);',
-          [userIds],
-        )
-      : { rows: [] as any[] };
+app.get(
+  '/api/users',
+  asyncHandler(async (_req, res) => {
+    const { rows } = await pool.query(
+      `SELECT ${USER_PUBLIC_SELECT}
+       FROM users
+       ORDER BY created_at DESC;`
+    );
+    res.json(rows.map(mapUser));
+  })
+);
 
-    const grouped = new Map<string, Array<{ questionId: string; question: string; answer: string }>>();
-    for (const exp of expRows) {
-      const arr = grouped.get(exp.user_id) ?? [];
-      arr.push({ questionId: exp.question_id, question: exp.question, answer: exp.answer });
-      grouped.set(exp.user_id, arr);
+app.get(
+  '/api/users/:id',
+  asyncHandler(async (req, res) => {
+    const id = toUuid(req.params.id);
+    const { rows } = await pool.query(
+      `SELECT ${USER_PUBLIC_SELECT}
+       FROM users
+       WHERE id = $1 LIMIT 1;`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json(mapUser(rows[0]));
+  })
+);
+
+app.put(
+  '/api/users/:id',
+  asyncHandler(async (req, res) => {
+    const id = toUuid(req.params.id);
+    const u = req.body ?? {};
+
+    const { rows } = await pool.query(
+      `
+        UPDATE users
+        SET name             = COALESCE($2, name),
+            avatar           = COALESCE($3, avatar),
+            rating           = COALESCE($4, rating),
+            rating_count     = COALESCE($5, rating_count),
+            bio              = $6,
+            location         = $7,
+            first_name       = $8,
+            middle_name      = $9,
+            surname          = $10,
+            date_of_birth    = $11,
+            place_of_birth   = $12,
+            nationality      = $13,
+            residency_status = $14,
+            address          = $15,
+            cv_file_name     = $16,
+            updated_at       = NOW()
+        WHERE id = $1
+          RETURNING ${USER_PUBLIC_SELECT};
+      `,
+      [
+        id,
+        u.name ?? null,
+        u.avatar ?? null,
+        u.rating ?? null,
+        u.ratingCount ?? null,
+        u.bio ?? null,
+        u.location ?? null,
+        u.firstName ?? null,
+        u.middleName ?? null,
+        u.surname ?? null,
+        u.dateOfBirth ?? null,
+        u.placeOfBirth ?? null,
+        u.nationality ?? null,
+        u.residencyStatus ?? null,
+        u.address ?? null,
+        u.cvFileName ?? null,
+      ]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json(mapUser(rows[0]));
+  })
+);
+
+// Optional: change password endpoint (handy for your UI flow)
+app.post(
+  '/api/users/:id/change-password',
+  asyncHandler(async (req, res) => {
+    const id = toUuid(req.params.id);
+    const { currentPassword, newPassword } = req.body ?? {};
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'currentPassword and newPassword are required.' });
+    }
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
     }
 
-    res.json(
-      rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        email: row.email,
-        role: row.role,
-        avatar: row.avatar ?? '',
-        rating: Number(row.rating ?? 0),
-        ratingCount: Number(row.rating_count ?? 0),
-        bio: row.bio ?? undefined,
-        location: row.location ?? undefined,
-        isSuspended: row.is_suspended ?? undefined,
-        firstName: row.first_name ?? undefined,
-        middleName: row.middle_name ?? undefined,
-        surname: row.surname ?? undefined,
-        dateOfBirth: row.date_of_birth ? new Date(row.date_of_birth).toISOString().split('T')[0] : undefined,
-        address: row.address ?? undefined,
-        placeOfBirth: row.place_of_birth ?? undefined,
-        nationality: row.nationality ?? undefined,
-        residencyStatus: row.residency_status ?? undefined,
-        languages: row.languages ?? undefined,
-        educationLevel: row.education_level ?? undefined,
-        maritalStatus: row.marital_status ?? undefined,
-        school: row.school ?? undefined,
-        cvFileName: row.cv_file_name ?? undefined,
-        experienceAnswers: grouped.get(row.id) ?? [],
-      })),
-    );
-  } finally {
-    client.release();
-  }
-}));
-
-app.put('/api/users/:id', asyncHandler(async (req, res) => {
-  const user = req.body;
-  const client = await pool.connect();
-  await client.query('BEGIN');
-  try {
-    try {
-      await client.query(
-        `INSERT INTO users (id, name, email, role, avatar, rating, rating_count, bio, location, is_suspended, first_name, middle_name, surname, date_of_birth, address, place_of_birth, nationality, residency_status, languages, education_level, marital_status, school, cv_file_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
-       ON CONFLICT (id) DO UPDATE SET
-         name=EXCLUDED.name,
-         email=EXCLUDED.email,
-         role=EXCLUDED.role,
-         avatar=EXCLUDED.avatar,
-         rating=EXCLUDED.rating,
-         rating_count=EXCLUDED.rating_count,
-         bio=EXCLUDED.bio,
-         location=EXCLUDED.location,
-         is_suspended=EXCLUDED.is_suspended,
-         first_name=EXCLUDED.first_name,
-         middle_name=EXCLUDED.middle_name,
-         surname=EXCLUDED.surname,
-         date_of_birth=EXCLUDED.date_of_birth,
-         address=EXCLUDED.address,
-         place_of_birth=EXCLUDED.place_of_birth,
-         nationality=EXCLUDED.nationality,
-         residency_status=EXCLUDED.residency_status,
-         languages=EXCLUDED.languages,
-         education_level=EXCLUDED.education_level,
-         marital_status=EXCLUDED.marital_status,
-         school=EXCLUDED.school,
-         cv_file_name=EXCLUDED.cv_file_name,
-         updated_at=NOW();`,
-        [
-          user.id,
-          user.name,
-          user.email,
-          user.role,
-          user.avatar ?? null,
-          user.rating ?? 0,
-          user.ratingCount ?? 0,
-          user.bio ?? null,
-          user.location ?? null,
-          user.isSuspended ?? false,
-          user.firstName ?? null,
-          user.middleName ?? null,
-          user.surname ?? null,
-          user.dateOfBirth ?? null,
-          user.address ?? null,
-          user.placeOfBirth ?? null,
-          user.nationality ?? null,
-          user.residencyStatus ?? null,
-          user.languages ?? null,
-          user.educationLevel ?? null,
-          user.maritalStatus ?? null,
-          user.school ?? null,
-          user.cvFileName ?? null,
-        ],
+    await withTx(async (client) => {
+      const { rows } = await client.query(
+        `SELECT password_hash
+         FROM users
+         WHERE id = $1 FOR UPDATE;`,
+        [id]
       );
-
-      await client.query('DELETE FROM experience_answers WHERE user_id = $1;', [user.id]);
-      if (user.experienceAnswers?.length) {
-        for (const answer of user.experienceAnswers) {
-          await client.query(
-            `INSERT INTO experience_answers (user_id, question_id, question, answer) VALUES ($1,$2,$3,$4);`,
-            [user.id, answer.questionId, answer.question, answer.answer],
-          );
-        }
+      if (!rows.length) {
+        res.status(404).json({ error: 'User not found' });
+        return;
       }
 
-      const { rows } = await client.query('SELECT * FROM users WHERE id = $1;', [user.id]);
-      res.json({ id: rows[0].id, ...user });
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    }
-  } finally {
-    client.release();
-  }
-}));
+      const ok = await bcrypt.compare(String(currentPassword), rows[0].password_hash);
+      if (!ok) {
+        res.status(401).json({ error: 'Invalid current password.' });
+        return;
+      }
+
+      const nextHash = await bcrypt.hash(String(newPassword), 12);
+      await client.query(
+        `
+          UPDATE users
+          SET password_hash             = $2,
+              password_changed_at       = NOW(),
+              password_reset_token_hash = NULL,
+              password_reset_expires_at = NULL,
+              updated_at                = NOW()
+          WHERE id = $1;
+        `,
+        [id, nextHash]
+      );
+
+      res.json({ ok: true });
+    });
+  })
+);
+
+// --- EXPERIENCE ANSWERS (maids) ---
+app.get(
+  '/api/users/:userId/experience_answers',
+  asyncHandler(async (req, res) => {
+    const userId = toUuid(req.params.userId);
+    const { rows } = await pool.query(
+      `
+        SELECT user_id, question_id, question, answer
+        FROM experience_answers
+        WHERE user_id = $1
+        ORDER BY question_id;
+      `,
+      [userId]
+    );
+    res.json(
+      rows.map((r) => ({
+        userId: r.user_id,
+        questionId: r.question_id,
+        question: r.question,
+        answer: r.answer ?? '',
+      }))
+    );
+  })
+);
+
+app.put(
+  '/api/users/:userId/experience_answers',
+  asyncHandler(async (req, res) => {
+    const userId = toUuid(req.params.userId);
+    const answers = Array.isArray(req.body) ? req.body : [];
+
+    await withTx(async (client) => {
+      for (const a of answers) {
+        await client.query(
+          `
+            INSERT INTO experience_answers (user_id, question_id, question, answer)
+            VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, question_id)
+          DO
+            UPDATE SET
+              question = EXCLUDED.question,
+              answer = EXCLUDED.answer;
+          `,
+          [userId, a.questionId, a.question, a.answer ?? '']
+        );
+      }
+    });
+
+    res.json({ ok: true });
+  })
+);
 
 // --- JOBS ---
-app.get('/api/jobs', asyncHandler(async (_req, res) => {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query('SELECT * FROM jobs ORDER BY date ASC;');
-    const jobIds = rows.map(r => r.id);
-    const { rows: historyRows } = jobIds.length
-      ? await client.query(
-          'SELECT job_id, status, note, timestamp FROM job_history WHERE job_id = ANY($1) ORDER BY timestamp ASC;',
-          [jobIds],
-        )
-      : { rows: [] as any[] };
+app.get(
+  '/api/jobs',
+  asyncHandler(async (_req, res) => {
+    const { rows } = await pool.query(`SELECT ${JOB_SELECT}
+                                       FROM jobs
+                                       ORDER BY created_at DESC;`);
+    res.json(rows.map(mapJob));
+  })
+);
 
-    const grouped = new Map<string, Array<{ status: string; note?: string; timestamp: string }>>();
-    for (const h of historyRows) {
-      const arr = grouped.get(h.job_id) ?? [];
-      arr.push({ status: h.status, note: h.note ?? undefined, timestamp: h.timestamp?.toISOString?.() ?? new Date().toISOString() });
-      grouped.set(h.job_id, arr);
-    }
+app.get(
+  '/api/jobs/:id',
+  asyncHandler(async (req, res) => {
+    const id = toUuid(req.params.id);
+    const { rows } = await pool.query(
+      `SELECT ${JOB_SELECT}
+                                       FROM jobs
+                                       WHERE id = $1 LIMIT 1;`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Job not found' });
+    res.json(mapJob(rows[0]));
+  })
+);
+
+app.get(
+  '/api/job_history',
+  asyncHandler(async (req, res) => {
+    const jobIdRaw = String(req.query.jobId ?? '');
+    if (!jobIdRaw) return res.status(400).json({ error: 'jobId is required' });
+    const jobId = toUuid(jobIdRaw);
+
+    const { rows } = await pool.query(
+      `
+        SELECT job_id, status, note, timestamp
+        FROM job_history
+        WHERE job_id = $1
+        ORDER BY timestamp ASC;
+      `,
+      [jobId]
+    );
 
     res.json(
-      rows.map(row => ({
-        id: row.id,
-        clientId: row.client_id,
-        title: row.title,
-        description: row.description ?? '',
-        location: row.location ?? '',
-        areaSize: Number(row.area_size ?? 0),
-        price: Number(row.price ?? 0),
-        currency: row.currency ?? 'R',
-        date: row.date ? new Date(row.date).toISOString().split('T')[0] : '',
-        status: row.status,
-        rooms: Number(row.rooms ?? 0),
-        bathrooms: Number(row.bathrooms ?? 0),
-        images: row.images ?? [],
-        assignedMaidId: row.assigned_maid_id ?? undefined,
-        paymentType: row.payment_type,
-        startTime: row.start_time ?? '',
-        endTime: row.end_time ?? '',
-        duration: Number(row.duration ?? 0),
-        workDates: row.work_dates?.map((d: Date) => new Date(d).toISOString().split('T')[0]) ?? [],
-        history: grouped.get(row.id) ?? [],
-      })),
+      rows.map((r) => ({
+        jobId: r.job_id,
+        status: r.status,
+        note: r.note ?? null,
+        timestamp: r.timestamp?.toISOString?.() ?? null,
+      }))
     );
-  } finally {
-    client.release();
-  }
-}));
+  })
+);
 
-app.put('/api/jobs/:id', asyncHandler(async (req, res) => {
-  const job = req.body;
-  const client = await pool.connect();
-  await client.query('BEGIN');
-  try {
-    try {
-      await client.query(
-        `INSERT INTO jobs (id, client_id, title, description, location, area_size, price, currency, date, status, rooms, bathrooms, images, payment_type, start_time, end_time, duration, work_dates, assigned_maid_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-       ON CONFLICT (id) DO UPDATE SET
-         title=EXCLUDED.title,
-         description=EXCLUDED.description,
-         location=EXCLUDED.location,
-         area_size=EXCLUDED.area_size,
-         price=EXCLUDED.price,
-         currency=EXCLUDED.currency,
-         date=EXCLUDED.date,
-         status=EXCLUDED.status,
-         rooms=EXCLUDED.rooms,
-         bathrooms=EXCLUDED.bathrooms,
-         images=EXCLUDED.images,
-         payment_type=EXCLUDED.payment_type,
-         start_time=EXCLUDED.start_time,
-         end_time=EXCLUDED.end_time,
-         duration=EXCLUDED.duration,
-         work_dates=EXCLUDED.work_dates,
-         assigned_maid_id=EXCLUDED.assigned_maid_id,
-         updated_at=NOW();`,
+// Create job (and history entry)
+app.post(
+  '/api/jobs',
+  asyncHandler(async (req, res) => {
+    const j = req.body ?? {};
+    const jobId = j.id ? toUuid(String(j.id)) : uuidv4();
+    const clientId = toUuid(String(j.clientId));
+
+    const created = await withTx(async (client) => {
+      const { rows } = await client.query(
+        `
+          INSERT INTO jobs (id, client_id, assigned_maid_id,
+                            title, description, location,
+                            area_size, price, currency,
+                            date, status, rooms, bathrooms,
+                            images, payment_type, start_time, end_time,
+                            duration, work_dates)
+          VALUES ($1, $2, $3,
+                  $4, $5, $6,
+                  $7, $8, $9,
+                  $10, $11, $12, $13,
+                  $14, $15, $16, $17,
+                  $18, $19)
+            RETURNING ${JOB_SELECT};
+        `,
         [
-          job.id,
-          job.clientId,
-          job.title,
-          job.description ?? null,
-          job.location ?? null,
-          job.areaSize ?? null,
-          job.price ?? null,
-          job.currency ?? 'R',
-          job.date ?? null,
-          job.status,
-          job.rooms ?? null,
-          job.bathrooms ?? null,
-          job.images ?? [],
-          job.paymentType,
-          job.startTime ?? null,
-          job.endTime ?? null,
-          job.duration ?? null,
-          job.workDates ?? [],
-          job.assignedMaidId ?? null,
-        ],
+          jobId,
+          clientId,
+          j.assignedMaidId ? toUuid(String(j.assignedMaidId)) : null,
+          j.title,
+          j.description ?? null,
+          j.location ?? null,
+          j.areaSize ?? null,
+          j.price ?? null,
+          j.currency ?? 'R',
+          j.date ?? null,
+          j.status ?? 'OPEN',
+          j.rooms ?? null,
+          j.bathrooms ?? null,
+          j.images ?? [],
+          j.paymentType ?? 'FIXED',
+          j.startTime ?? null,
+          j.endTime ?? null,
+          j.duration ?? null,
+          j.workDates ?? [],
+        ]
       );
 
-      await client.query('DELETE FROM job_history WHERE job_id = $1;', [job.id]);
-      if (job.history?.length) {
-        for (const entry of job.history) {
-          await client.query(
-            `INSERT INTO job_history (job_id, status, note, timestamp) VALUES ($1,$2,$3,$4);`,
-            [job.id, entry.status, entry.note ?? null, entry.timestamp],
-          );
-        }
+      await client.query(
+        `
+          INSERT INTO job_history (job_id, status, note, timestamp)
+          VALUES ($1, $2, $3, NOW());
+        `,
+        [jobId, j.status ?? 'OPEN', 'Job posted']
+      );
+
+      return mapJob(rows[0]);
+    });
+
+    res.status(201).json(created);
+  })
+);
+
+// Update job (and history entry ONLY if status changes)
+app.put(
+  '/api/jobs/:id',
+  asyncHandler(async (req, res) => {
+    const jobId = toUuid(req.params.id);
+    const j = req.body ?? {};
+
+    const result = await withTx(async (client) => {
+      const existing = await client.query(
+        `SELECT status
+                                           FROM jobs
+                                           WHERE id = $1 FOR UPDATE;`,
+        [jobId]
+      );
+      if (!existing.rowCount) return null;
+
+      const prevStatus = existing.rows[0].status;
+
+      const { rows } = await client.query(
+        `
+          UPDATE jobs
+          SET assigned_maid_id = $2,
+              title            = COALESCE($3, title),
+              description      = $4,
+              location         = $5,
+              area_size        = $6,
+              price            = $7,
+              currency         = COALESCE($8, currency),
+              date             = $9,
+              status           = COALESCE($10, status),
+              rooms            = $11,
+              bathrooms        = $12,
+              images           = COALESCE($13, images),
+              payment_type     = COALESCE($14, payment_type),
+              start_time       = $15,
+              end_time         = $16,
+              duration         = $17,
+              work_dates       = COALESCE($18, work_dates),
+              updated_at       = NOW()
+          WHERE id = $1
+            RETURNING ${JOB_SELECT};
+        `,
+        [
+          jobId,
+          j.assignedMaidId ? toUuid(String(j.assignedMaidId)) : null,
+          j.title ?? null,
+          j.description ?? null,
+          j.location ?? null,
+          j.areaSize ?? null,
+          j.price ?? null,
+          j.currency ?? null,
+          j.date ?? null,
+          j.status ?? null,
+          j.rooms ?? null,
+          j.bathrooms ?? null,
+          j.images ?? null,
+          j.paymentType ?? null,
+          j.startTime ?? null,
+          j.endTime ?? null,
+          j.duration ?? null,
+          j.workDates ?? null,
+        ]
+      );
+
+      const updatedRow = rows[0];
+      const nextStatus = updatedRow.status;
+
+      if (j.status && j.status !== prevStatus) {
+        await client.query(
+          `
+            INSERT INTO job_history (job_id, status, note, timestamp)
+            VALUES ($1, $2, $3, NOW());
+          `,
+          [jobId, nextStatus, `Status changed: ${prevStatus} → ${nextStatus}`]
+        );
       }
 
-      res.json(job);
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    }
-  } finally {
-    client.release();
-  }
-}));
+      return mapJob(updatedRow);
+    });
 
-app.delete('/api/jobs/:id', asyncHandler(async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('DELETE FROM jobs WHERE id = $1;', [req.params.id]);
+    if (!result) return res.status(404).json({ error: 'Job not found' });
+    res.json(result);
+  })
+);
+
+// Delete job (properly deletes dependents too)
+app.delete(
+  '/api/jobs/:id',
+  asyncHandler(async (req, res) => {
+    const jobId = toUuid(req.params.id);
+
+    await withTx(async (client) => {
+      await client.query(
+        `DELETE
+                          FROM applications
+                          WHERE job_id = $1;`,
+        [jobId]
+      );
+      await client.query(
+        `DELETE
+                          FROM job_history
+                          WHERE job_id = $1;`,
+        [jobId]
+      );
+      await client.query(
+        `DELETE
+                          FROM jobs
+                          WHERE id = $1;`,
+        [jobId]
+      );
+    });
+
     res.json({ ok: true });
-  } finally {
-    client.release();
-  }
-}));
+  })
+);
 
 // --- APPLICATIONS ---
-app.get('/api/applications', asyncHandler(async (_req, res) => {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query('SELECT * FROM applications ORDER BY applied_at DESC;');
-    res.json(
-      rows.map(row => ({
-        id: row.id,
-        jobId: row.job_id,
-        maidId: row.maid_id,
-        status: row.status,
-        message: row.message ?? '',
-        appliedAt: row.applied_at?.toISOString?.() ?? new Date().toISOString(),
-      })),
-    );
-  } finally {
-    client.release();
-  }
-}));
+app.get(
+  '/api/applications',
+  asyncHandler(async (req, res) => {
+    const jobIdRaw = req.query.jobId ? String(req.query.jobId) : '';
+    const maidIdRaw = req.query.maidId ? String(req.query.maidId) : '';
 
-app.put('/api/applications/:id', asyncHandler(async (req, res) => {
-  const appBody = req.body;
-  const client = await pool.connect();
-  try {
-    await client.query(
-      `INSERT INTO applications (id, job_id, maid_id, status, message, applied_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (id) DO UPDATE SET
-         status=EXCLUDED.status,
-         message=EXCLUDED.message,
-         updated_at=NOW();`,
-      [
-        appBody.id,
-        appBody.jobId,
-        appBody.maidId,
-        appBody.status,
-        appBody.message ?? null,
-        appBody.appliedAt ?? new Date().toISOString(),
-        new Date().toISOString(),
-      ],
+    const where: string[] = [];
+    const params: any[] = [];
+
+    if (jobIdRaw) {
+      params.push(toUuid(jobIdRaw));
+      where.push(`job_id = $${params.length}`);
+    }
+    if (maidIdRaw) {
+      params.push(toUuid(maidIdRaw));
+      where.push(`maid_id = $${params.length}`);
+    }
+
+    const sql = `
+      SELECT id, job_id, maid_id, status, message, applied_at, updated_at
+      FROM applications ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY applied_at DESC;
+    `;
+
+    const { rows } = await pool.query(sql, params);
+    res.json(rows.map(mapApplication));
+  })
+);
+
+/**
+ * Maid applies → client gets notification
+ * (single transaction)
+ */
+app.post(
+  '/api/applications',
+  asyncHandler(async (req, res) => {
+    const a = req.body ?? {};
+    const appId = a.id ? toUuid(String(a.id)) : uuidv4();
+    const jobId = toUuid(String(a.jobId));
+    const maidId = toUuid(String(a.maidId));
+    const message = String(a.message ?? '').trim();
+
+    if (!message) return res.status(400).json({ error: 'Application message is required.' });
+
+    const created = await withTx(async (client) => {
+      // validate job exists
+      const jobQ = await client.query(
+        `SELECT id, client_id, title, status
+         FROM jobs
+         WHERE id = $1 FOR UPDATE;`,
+        [jobId]
+      );
+      if (!jobQ.rowCount) throw new Error('Job not found');
+      if (jobQ.rows[0].status !== 'OPEN') throw new Error('Job is not open');
+
+      // prevent duplicate apply (by maid+job)
+      const dup = await client.query(
+        `SELECT id
+         FROM applications
+         WHERE job_id = $1
+           AND maid_id = $2 LIMIT 1;`,
+        [jobId, maidId]
+      );
+      if (dup.rowCount) {
+        // update message instead of creating a second application
+        const { rows } = await client.query(
+          `
+            UPDATE applications
+            SET message = $2,
+                updated_at = NOW()
+            WHERE id = $1 RETURNING id, job_id, maid_id, status, message, applied_at, updated_at;
+          `,
+          [dup.rows[0].id, message]
+        );
+        return { application: mapApplication(rows[0]), created: false };
+      }
+
+      const { rows } = await client.query(
+        `
+          INSERT INTO applications (id, job_id, maid_id, status, message, applied_at, updated_at)
+          VALUES ($1, $2, $3, 'PENDING', $4, NOW(),
+                  NOW()) RETURNING id, job_id, maid_id, status, message, applied_at, updated_at;
+        `,
+        [appId, jobId, maidId, message]
+      );
+
+      // build notification to client
+      const maidQ = await client.query(
+        `SELECT name
+                                        FROM users
+                                        WHERE id = $1 LIMIT 1;`,
+        [maidId]
+      );
+      const maidName = maidQ.rows[0]?.name ?? 'A maid';
+      const clientId = jobQ.rows[0].client_id;
+      const jobTitle = jobQ.rows[0].title;
+
+      await client.query(
+        `
+          INSERT INTO notifications (id, user_id, message, type, read, timestamp)
+          VALUES ($1, $2, $3, 'info', false, NOW());
+        `,
+        [uuidv4(), clientId, `New application from ${maidName} for "${jobTitle}"`]
+      );
+
+      return { application: mapApplication(rows[0]), created: true };
+    });
+
+    res.status(created.created ? 201 : 200).json(created.application);
+  })
+);
+
+/**
+ * Client decision endpoint (THE “accept flow”):
+ * One transaction updates:
+ * - application status
+ * - job assigned maid + job status
+ * - job history entry
+ * - notifications (accepted maid + auto-rejected others)
+ */
+app.patch(
+  '/api/applications/:id/status',
+  asyncHandler(async (req, res) => {
+    const applicationId = toUuid(req.params.id);
+    const status = String(req.body?.status ?? '').toUpperCase();
+
+    if (!['ACCEPTED', 'REJECTED', 'PENDING'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status.' });
+    }
+
+    const out = await withTx(async (client) => {
+      const appQ = await client.query(
+        `
+          SELECT id, job_id, maid_id, status
+          FROM applications
+          WHERE id = $1
+            FOR UPDATE;
+        `,
+        [applicationId]
+      );
+      if (!appQ.rowCount) return null;
+
+      const appRow = appQ.rows[0];
+      const jobId = appRow.job_id;
+      const maidId = appRow.maid_id;
+
+      const jobQ = await client.query(
+        `SELECT id, client_id, title, status
+         FROM jobs
+         WHERE id = $1 FOR UPDATE;`,
+        [jobId]
+      );
+      if (!jobQ.rowCount) throw new Error('Job not found');
+      const jobTitle = jobQ.rows[0].title;
+      const clientId = jobQ.rows[0].client_id;
+
+      // update the chosen application
+      const updatedAppQ = await client.query(
+        `
+          UPDATE applications
+          SET status = $2,
+              updated_at = NOW()
+          WHERE id = $1 RETURNING id, job_id, maid_id, status, message, applied_at, updated_at;
+        `,
+        [applicationId, status]
+      );
+
+      // accept flow: assign maid, set job in progress, write history, notify
+      if (status === 'ACCEPTED') {
+        // assign maid + flip job status (OPEN -> IN_PROGRESS)
+        const updatedJobQ = await client.query(
+          `
+            UPDATE jobs
+            SET assigned_maid_id = $2,
+                status           = CASE WHEN status = 'OPEN' THEN 'IN_PROGRESS' ELSE status END,
+                updated_at       = NOW()
+            WHERE id = $1
+              RETURNING ${JOB_SELECT};
+          `,
+          [jobId, maidId]
+        );
+
+        await client.query(
+          `
+            INSERT INTO job_history (job_id, status, note, timestamp)
+            VALUES ($1, $2, $3, NOW());
+          `,
+          [jobId, updatedJobQ.rows[0].status, 'Maid accepted and assigned']
+        );
+
+        // notify accepted maid
+        await client.query(
+          `
+            INSERT INTO notifications (id, user_id, message, type, read, timestamp)
+            VALUES ($1, $2, $3, 'success', false, NOW());
+          `,
+          [uuidv4(), maidId, `✅ You were accepted for "${jobTitle}".`]
+        );
+
+        // auto-reject other pending applications + notify them
+        const othersQ = await client.query(
+          `
+            SELECT id, maid_id
+            FROM applications
+            WHERE job_id = $1
+              AND id <> $2
+              AND status = 'PENDING'
+              FOR UPDATE;
+          `,
+          [jobId, applicationId]
+        );
+
+        if (othersQ.rowCount) {
+          await client.query(
+            `
+              UPDATE applications
+              SET status = 'REJECTED',
+                  updated_at = NOW()
+              WHERE job_id = $1
+                AND id <> $2
+                AND status = 'PENDING';
+            `,
+            [jobId, applicationId]
+          );
+
+          for (const r of othersQ.rows) {
+            await client.query(
+              `
+                INSERT INTO notifications (id, user_id, message, type, read, timestamp)
+                VALUES ($1, $2, $3, 'error', false, NOW());
+              `,
+              [uuidv4(), r.maid_id, `❌ "${jobTitle}" has been filled.`]
+            );
+          }
+        }
+
+        // (optional) notify client too (they triggered it, but still useful in logs)
+        await client.query(
+          `
+            INSERT INTO notifications (id, user_id, message, type, read, timestamp)
+            VALUES ($1, $2, $3, 'info', false, NOW());
+          `,
+          [uuidv4(), clientId, `You accepted an applicant for "${jobTitle}".`]
+        );
+
+        return {
+          application: mapApplication(updatedAppQ.rows[0]),
+          job: mapJob(updatedJobQ.rows[0]),
+        };
+      }
+
+      // reject flow: notify maid
+      if (status === 'REJECTED') {
+        await client.query(
+          `
+            INSERT INTO notifications (id, user_id, message, type, read, timestamp)
+            VALUES ($1, $2, $3, 'error', false, NOW());
+          `,
+          [uuidv4(), maidId, `❌ Your application for "${jobTitle}" was rejected.`]
+        );
+      }
+
+      return {
+        application: mapApplication(updatedAppQ.rows[0]),
+      };
+    });
+
+    if (!out) return res.status(404).json({ error: 'Application not found' });
+    res.json(out);
+  })
+);
+
+app.delete(
+  '/api/applications/:id',
+  asyncHandler(async (req, res) => {
+    const id = toUuid(req.params.id);
+    await pool.query(
+      `DELETE
+                      FROM applications
+                      WHERE id = $1;`,
+      [id]
     );
-    res.json(appBody);
-  } finally {
-    client.release();
-  }
-}));
+    res.json({ ok: true });
+  })
+);
 
 // --- NOTIFICATIONS ---
-app.get('/api/notifications', asyncHandler(async (_req, res) => {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query('SELECT * FROM notifications ORDER BY timestamp DESC;');
-    res.json(
-      rows.map(row => ({
-        id: row.id,
-        userId: row.user_id,
-        message: row.message,
-        type: row.type,
-        read: row.read,
-        timestamp: row.timestamp?.toISOString?.() ?? new Date().toISOString(),
-      })),
+app.get(
+  '/api/notifications',
+  asyncHandler(async (_req, res) => {
+    const { rows } = await pool.query(
+      `
+        SELECT id, user_id, message, type, read, timestamp
+        FROM notifications
+        ORDER BY timestamp DESC;
+      `
     );
-  } finally {
-    client.release();
-  }
-}));
+    res.json(rows.map(mapNotification));
+  })
+);
 
-app.put('/api/notifications/:id', asyncHandler(async (req, res) => {
-  const note = req.body;
-  const client = await pool.connect();
-  try {
-    await client.query(
-      `INSERT INTO notifications (id, user_id, message, type, read, timestamp)
-       VALUES ($1,$2,$3,$4,$5,$6);`,
-      [note.id, note.userId, note.message, note.type, note.read ?? false, note.timestamp ?? new Date().toISOString()],
+app.post(
+  '/api/notifications',
+  asyncHandler(async (req, res) => {
+    const n = req.body ?? {};
+    const id = n.id ? toUuid(String(n.id)) : uuidv4();
+    const userId = toUuid(String(n.userId));
+
+    const { rows } = await pool.query(
+      `
+        INSERT INTO notifications (id, user_id, message, type, read, timestamp)
+        VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW())) RETURNING id, user_id, message, type, read, timestamp;
+      `,
+      [id, userId, n.message, n.type ?? 'info', !!n.read, n.timestamp ?? null]
     );
-    res.json(note);
-  } finally {
-    client.release();
-  }
-}));
 
-app.post('/api/notifications/mark-read', asyncHandler(async (req, res) => {
-  const { userId } = req.body ?? {};
-  if (!userId) return res.status(400).json({ error: 'userId required' });
+    res.status(201).json(mapNotification(rows[0]));
+  })
+);
 
-  const client = await pool.connect();
-  try {
-    await client.query('UPDATE notifications SET read = TRUE WHERE user_id = $1;', [userId]);
+app.post(
+  '/api/notifications/mark_read',
+  asyncHandler(async (req, res) => {
+    const userId = toUuid(String(req.body?.userId ?? ''));
+    await pool.query(
+      `UPDATE notifications
+                      SET read = true
+                      WHERE user_id = $1 AND read = false;`,
+      [userId]
+    );
     res.json({ ok: true });
-  } finally {
-    client.release();
-  }
-}));
+  })
+);
 
-// Global error handler (must be after routes)
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+// --- errors ---
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
+  const msg = err?.message ? String(err.message) : 'Server error';
+  // if you want: map known errors to 400/404, etc.
+  res.status(500).json({ error: msg });
 });
 
-
-const server = app.listen(PORT, () => {
-  console.log(`API server listening on http://localhost:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`API running on http://localhost:${PORT}`);
 });
-
-const shutdown = async (signal: string) => {
-  console.log(`\n${signal} received: shutting down...`);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      server.close(err => (err ? reject(err) : resolve()));
-    });
-    await pool.end();
-    process.exit(0);
-  } catch (err) {
-    console.error('Shutdown error', err);
-    process.exit(1);
-  }
-};
-
-process.on('SIGINT', () => void shutdown('SIGINT'));
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
