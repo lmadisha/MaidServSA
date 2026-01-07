@@ -140,15 +140,28 @@ const ClientDashboard: React.FC<{
                     </p>
                   </div>
                   <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleEdit(job)}
-                      className="text-gray-400 hover:text-gray-500"
-                    >
-                      <IconEdit className="w-5 h-5" />
-                    </button>
+                    {/* ONLY show the edit button if the job is still OPEN */}
+                    {job.status === JobStatus.OPEN ? (
+                      <button
+                        onClick={() => handleEdit(job)}
+                        className="text-gray-400 hover:text-teal-600 transition-colors"
+                        title="Edit Job"
+                      >
+                        <IconEdit className="w-5 h-5" />
+                      </button>
+                    ) : (
+                      <span
+                        className="text-gray-300 cursor-not-allowed"
+                        title="Jobs in progress cannot be edited"
+                      >
+                        <IconEdit className="w-5 h-5" />
+                      </span>
+                    )}
+
                     <button
                       onClick={() => onDeleteJob(job.id)}
-                      className="text-red-400 hover:text-red-500"
+                      className="text-red-400 hover:text-red-500 transition-colors"
+                      title="Delete Job"
                     >
                       <IconTrash className="w-5 h-5" />
                     </button>

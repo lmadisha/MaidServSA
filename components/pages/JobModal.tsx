@@ -13,12 +13,13 @@ const JobModal: React.FC<{
   onSave: (job: Job) => void;
   clientId: string;
 }> = ({ job, isOpen, onClose, onSave, clientId }) => {
+  // Use undefined for price and areaSize so the inputs can be empty
   const [formData, setFormData] = useState<Partial<Job>>({
     title: '',
     description: '',
     location: '',
-    areaSize: 0,
-    price: 0,
+    areaSize: undefined,
+    price: undefined,
     rooms: 1,
     bathrooms: 1,
     paymentType: PaymentType.FIXED,
@@ -37,8 +38,8 @@ const JobModal: React.FC<{
         title: '',
         description: '',
         location: '',
-        areaSize: 0,
-        price: 0,
+        areaSize: undefined,
+        price: undefined,
         rooms: 1,
         bathrooms: 1,
         paymentType: PaymentType.FIXED,
@@ -69,10 +70,18 @@ const JobModal: React.FC<{
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Basic validation to ensure required numbers are present
+    if (formData.price === undefined || formData.areaSize === undefined) {
+      alert('Please enter a price and area size.');
+      return;
+    }
+
     const duration =
       parseInt(formData.endTime!.split(':')[0]) - parseInt(formData.startTime!.split(':')[0]);
+
     const newJob: Job = {
-      id: job?.id || `job_${Date.now()}`,
+      id: job?.id || crypto.randomUUID(), // Use crypto for cleaner IDs
       clientId,
       title: formData.title!,
       description: formData.description!,
@@ -146,26 +155,43 @@ const JobModal: React.FC<{
                   <option value={PaymentType.HOURLY}>Hourly Rate</option>
                 </select>
               </div>
+
+              {/* PRICE INPUT */}
               <div>
                 <label className={LABEL_CLASS}>Price (R)</label>
                 <input
                   type="number"
                   required
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                  value={formData.price ?? ''} // Show empty string if undefined
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      price: e.target.value === '' ? undefined : Number(e.target.value),
+                    })
+                  }
                   className={INPUT_CLASS}
+                  placeholder="Enter price"
                 />
               </div>
+
+              {/* AREA SIZE INPUT */}
               <div>
                 <label className={LABEL_CLASS}>Size (sqm)</label>
                 <input
                   type="number"
                   required
-                  value={formData.areaSize}
-                  onChange={(e) => setFormData({ ...formData, areaSize: Number(e.target.value) })}
+                  value={formData.areaSize ?? ''} // Show empty string if undefined
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      areaSize: e.target.value === '' ? undefined : Number(e.target.value),
+                    })
+                  }
                   className={INPUT_CLASS}
+                  placeholder="m²"
                 />
               </div>
+
               <div>
                 <label className={LABEL_CLASS}>Bedrooms</label>
                 <input
@@ -186,6 +212,7 @@ const JobModal: React.FC<{
                   className={INPUT_CLASS}
                 />
               </div>
+              {/* Rest of the form stays the same... */}
               <div>
                 <label className={LABEL_CLASS}>Start Time</label>
                 <input

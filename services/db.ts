@@ -98,8 +98,13 @@ class DBService {
   }
 
   // Backwards-compat alias (your code currently calls saveJob)
-  saveJob(job: Job): Promise<Job> {
-    return this.updateJob(job);
+  async saveJob(job: Job): Promise<Job> {
+    // Check if this is a brand new job (usually by checking if we are in the 'handlePostJob' flow)
+    // For safety, let's just make sure we have a dedicated create/update logic
+    if (job.id && (await this.getJob(job.id).catch(() => null))) {
+      return this.updateJob(job);
+    }
+    return api<Job>('/jobs', { method: 'POST', body: JSON.stringify(job) });
   }
 
   deleteJob(jobId: string): Promise<void> {
@@ -107,6 +112,14 @@ class DBService {
   }
 
   // -------------- APPLICATIONS --------------
+  // Add this specific method for the Accept/Reject flow
+  async updateApplicationStatus(appId: string, status: string): Promise<any> {
+    return api<any>(`/applications/${appId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
   getApplications(): Promise<Application[]> {
     return api<Application[]>('/applications');
   }
@@ -115,7 +128,7 @@ class DBService {
     return api<Application>(`/applications/${applicationId}`);
   }
 
-  createApplication(app: Partial<Application>): Promise<Application> {
+  async createApplication(app: Partial<Application>): Promise<Application> {
     return api<Application>('/applications', { method: 'POST', body: JSON.stringify(app) });
   }
 
@@ -144,7 +157,7 @@ class DBService {
    * CREATE notification - expects:
    *   POST /api/notifications
    */
-  createNotification(note: Partial<Notification>): Promise<Notification> {
+  async createNotification(note: Partial<Notification>): Promise<Notification> {
     return api<Notification>('/notifications', { method: 'POST', body: JSON.stringify(note) });
   }
 
@@ -161,10 +174,21 @@ class DBService {
   }
 
   markNotificationsRead(userId: string): Promise<void> {
-    return api<void>(`/notifications/mark-read`, {
+    return api<void>(`/notifications/mark_read`, {
       method: 'POST',
       body: JSON.stringify({ userId }),
     });
+  }
+
+  markSingleNotificationRead(id: string): Promise<void> {
+    return api<void>(`/notifications/${id}/read`, {
+      method: 'PATCH',
+    });
+  }
+
+  // Get the experince answer from maid to client
+  getExperienceAnswers(userId: string): Promise<any[]> {
+    return api<any[]>(`/users/${userId}/experience_answers`);
   }
 }
 

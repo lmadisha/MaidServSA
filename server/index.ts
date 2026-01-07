@@ -1,3 +1,4 @@
+import path from 'path';
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
@@ -591,8 +592,8 @@ app.put(
   asyncHandler(async (req, res) => {
     const jobId = toUuid(req.params.id);
     const j = req.body ?? {};
-
-    const result = await withTx(async (client) => {
+    // 1. Fetch current status
+    const result = await withTx<{ job?: any; error?: string }>(async (client) => {
       const existing = await client.query(
         `SELECT status
                                            FROM jobs
@@ -603,9 +604,13 @@ app.put(
 
       const prevStatus = existing.rows[0].status;
 
+      // 2. BLOCK update if status is not OPEN
+      if (prevStatus !== 'OPEN') {
+        return { error: 'LOCKED' };
+      }
+
       const { rows } = await client.query(
-        `
-          UPDATE jobs
+        `UPDATE jobs
           SET assigned_maid_id = $2,
               title            = COALESCE($3, title),
               description      = $4,
@@ -625,8 +630,7 @@ app.put(
               work_dates       = COALESCE($18, work_dates),
               updated_at       = NOW()
           WHERE id = $1
-            RETURNING ${JOB_SELECT};
-        `,
+           RETURNING ${JOB_SELECT};`,
         [
           jobId,
           j.assignedMaidId ? toUuid(String(j.assignedMaidId)) : null,
@@ -654,12 +658,18 @@ app.put(
 
       if (j.status && j.status !== prevStatus) {
         await client.query(
-          `
-            INSERT INTO job_history (job_id, status, note, timestamp)
-            VALUES ($1, $2, $3, NOW());
-          `,
+          `INSERT INTO job_history (job_id, status, note, timestamp)
+           VALUES ($1, $2, $3, NOW());`,
           [jobId, nextStatus, `Status changed: ${prevStatus} → ${nextStatus}`]
         );
+      }
+
+      if (result.error === 'NOT_FOUND') return res.status(404).json({ error: 'Job not found' });
+      if (result.error === 'LOCKED') {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'This job is already in progress and cannot be edited.',
+        });
       }
 
       return mapJob(updatedRow);
@@ -1035,6 +1045,28 @@ app.post(
     res.json({ ok: true });
   })
 );
+
+/**
+ * Mark a single notification as read
+ */
+app.patch(
+  '/api/notifications/:id/read',
+  asyncHandler(async (req, res) => {
+    const id = toUuid(req.params.id);
+    const { rows } = await pool.query(
+      `UPDATE notifications
+       SET read = true
+       WHERE id = $1 RETURNING *;`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Notification not found' });
+    res.json(mapNotification(rows[0]));
+  })
+);
+
+// This is to view user's cv's and information
+
+app.use('/api/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 // --- errors ---
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
