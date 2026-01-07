@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Application, ApplicationStatus, Job, JobStatus, User } from '../../types';
 import { IconCalendar, IconClock, IconEdit, IconTrash } from '../Icons';
 import JobModal from './JobModal';
+import MaidProfileModal from './MaidProfileModal.tsx';
 
 const CalendarView: React.FC<{ jobs: Job[] }> = ({ jobs }) => {
   const sortedJobs = [...jobs].sort(
@@ -85,6 +86,8 @@ const ClientDashboard: React.FC<{
     setEditingJob(undefined);
     setIsModalOpen(true);
   };
+
+  const [viewingMaid, setViewingMaid] = useState<User | null>(null);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -187,8 +190,20 @@ const ClientDashboard: React.FC<{
                               />
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{maid?.name}</p>
+                                {/* Add the "View Profile" link here */}
+                                <button
+                                  onClick={() => setViewingMaid(maid || null)}
+                                  className="text-xs text-teal-600 hover:underline font-semibold"
+                                >
+                                  View Full Profile & Experience
+                                </button>
                                 <p className="text-xs text-gray-500">{app.message}</p>
                               </div>
+                              <MaidProfileModal
+                                user={viewingMaid}
+                                isOpen={!!viewingMaid}
+                                onClose={() => setViewingMaid(null)}
+                              />
                             </div>
                             <div className="flex space-x-2">
                               {app.status === ApplicationStatus.PENDING && (
