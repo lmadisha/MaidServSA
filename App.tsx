@@ -85,13 +85,18 @@ const App: React.FC = () => {
   };
 
   const handlePostJob = async (job: Job) => {
-    const saved = await db.saveJob(job);
+    const saved = await db.createJob(job);
     setJobs((prev) => [...prev, saved]);
   };
 
   const handleUpdateJob = async (job: Job) => {
-    const saved = await db.saveJob(job);
-    setJobs((prev) => prev.map((j) => (j.id === saved.id ? saved : j)));
+    try {
+      const saved = await db.saveJob(job);
+      setJobs((prev) => prev.map((j) => (j.id === saved.id ? saved : j)));
+    } catch (error: any) {
+      // This catches the 403 error from the server
+      alert(error.message || 'This job is locked and cannot be edited.');
+    }
   };
 
   const handleDeleteJob = async (jobId: string) => {
@@ -109,7 +114,7 @@ const App: React.FC = () => {
       message,
       appliedAt: new Date().toISOString(),
     };
-    const saved = await db.saveApplication(newApp);
+    const saved = await db.createApplication(newApp);
     setApplications((prev) => [...prev, saved]);
 
     const job = jobs.find((j) => j.id === jobId);
@@ -128,22 +133,24 @@ const App: React.FC = () => {
   };
 
   const handleUpdateApplicationStatus = async (appId: string, status: ApplicationStatus) => {
-    const app = applications.find((a) => a.id === appId);
-    if (app) {
-      const updated = { ...app, status };
-      await db.saveApplication(updated);
-      setApplications((prev) => prev.map((a) => (a.id === appId ? updated : a)));
+    try {
+      // 1. Use the PATCH endpoint we just created
+      // This triggers the backend logic to notify the maid and reject others
+      const result = await db.updateApplicationStatus(appId, status);
 
-      const note: Notification = {
-        id: crypto.randomUUID(),
-        userId: app.maidId,
-        message: `Your application for job ID ${app.jobId} was ${status.toLowerCase()}`,
-        type: status === ApplicationStatus.ACCEPTED ? 'success' : 'error',
-        read: false,
-        timestamp: new Date().toISOString(),
-      };
-      const savedNote = await db.saveNotification(note);
-      setNotifications((prev) => [...prev, savedNote]);
+      // 2. Update local state with the returned data
+      if (result.application) {
+        setApplications((prev) => prev.map((a) => (a.id === appId ? result.application : a)));
+      }
+      if (result.job) {
+        setJobs((prev) => prev.map((j) => (j.id === result.job.id ? result.job : j)));
+      }
+
+      // 3. Sync notifications (since the backend just created new ones)
+      const allNotes = await db.getNotifications();
+      setNotifications(allNotes);
+    } catch (error) {
+      alert('Failed to update application status');
     }
   };
 
@@ -153,6 +160,20 @@ const App: React.FC = () => {
       setNotifications((prev) =>
         prev.map((n) => (n.userId === currentUser.id ? { ...n, read: true } : n))
       );
+    }
+  };
+
+  const handleNotificationClick = async (notificationId: string) => {
+    try {
+      await db.markSingleNotificationRead(notificationId);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      );
+
+      // Optional: Logic to navigate user to the relevant page based on notification
+      // e.g., if message contains "job", navigate to dashboard
+    } catch (e) {
+      console.error('Failed to mark notification as read', e);
     }
   };
 
@@ -168,6 +189,7 @@ const App: React.FC = () => {
         notifications={notifications}
         onLogout={handleLogout}
         onMarkNotificationsRead={handleMarkNotificationsRead}
+        onNotificationClick={handleNotificationClick}
       />
       <div className="bg-gray-50 min-h-screen">
         <Routes>

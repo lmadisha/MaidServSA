@@ -15,7 +15,9 @@ const Navbar: React.FC<{
   notifications: Notification[];
   onLogout: () => void;
   onMarkNotificationsRead: () => void;
-}> = ({ currentUser, notifications, onLogout, onMarkNotificationsRead }) => {
+  // Added this prop to handle individual clicks
+  onNotificationClick: (id: string) => void;
+}> = ({ currentUser, notifications, onLogout, onMarkNotificationsRead, onNotificationClick }) => {
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -109,7 +111,10 @@ const Navbar: React.FC<{
                             </span>
                             {unreadCount > 0 && (
                               <button
-                                onClick={onMarkNotificationsRead}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onMarkNotificationsRead();
+                                }}
                                 className="text-xs text-teal-600 hover:text-teal-800 font-medium"
                               >
                                 Mark all read
@@ -126,22 +131,37 @@ const Navbar: React.FC<{
                             myNotifications.map((notification) => (
                               <div
                                 key={notification.id}
-                                className={`px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors ${!notification.read ? 'bg-teal-50/30' : ''}`}
+                                // Handle individual click to mark as read
+                                onClick={() => {
+                                  if (!notification.read) {
+                                    onNotificationClick(notification.id);
+                                  }
+                                }}
+                                className={`px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer relative ${
+                                  !notification.read ? 'bg-teal-50/50' : 'bg-white'
+                                }`}
                               >
                                 <div className="flex items-start">
                                   <div className="flex-shrink-0 mt-0.5 mr-3">
                                     {getNotificationIcon(notification.type)}
                                   </div>
                                   <div className="flex-1">
-                                    <p className="text-sm text-gray-800">{notification.message}</p>
+                                    <p
+                                      className={`text-sm ${!notification.read ? 'font-semibold text-gray-900' : 'text-gray-600'}`}
+                                    >
+                                      {notification.message}
+                                    </p>
                                     <p className="text-xs text-gray-400 mt-1">
                                       {new Date(notification.timestamp).toLocaleTimeString([], {
                                         hour: '2-digit',
                                         minute: '2-digit',
                                       })}{' '}
-                                      " {new Date(notification.timestamp).toLocaleDateString()}
+                                      • {new Date(notification.timestamp).toLocaleDateString()}
                                     </p>
                                   </div>
+                                  {!notification.read && (
+                                    <div className="ml-2 mt-1.5 flex-shrink-0 h-2 w-2 bg-teal-500 rounded-full"></div>
+                                  )}
                                 </div>
                               </div>
                             ))
