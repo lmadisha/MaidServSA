@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'url';
 import path from 'path';
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -9,6 +10,9 @@ import type { PoolClient } from 'pg';
 import { pool, testDbConnection } from './db';
 
 const app = express();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * If you're using deterministic UUIDs for seeds (like uuid_generate_v5 in SQL),
@@ -1066,7 +1070,7 @@ app.patch(
 
 // This is to view user's cv's and information
 
-app.use('/api/uploads', express.static(path.join(__dirname, '../../uploads')));
+app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // --- errors ---
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
