@@ -21,72 +21,112 @@ const MaidProfileModal: React.FC<{
     }
   }, [user, isOpen]);
 
+  // HELPER: Formats raw database strings into readable text or tags
+  const renderFormattedAnswer = (rawAnswer: string) => {
+    if (!rawAnswer) return <span className="text-gray-400 italic">No answer provided</span>;
+
+    try {
+      // Check if the answer is a JSON array (from our Multi-Selectors)
+      const parsed = JSON.parse(rawAnswer);
+
+      if (Array.isArray(parsed)) {
+        return (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {parsed.map((item, idx) => (
+              <span
+                key={idx}
+                className="px-2 py-0.5 bg-teal-50 text-teal-700 text-[11px] font-semibold rounded-md border border-teal-100"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        );
+      }
+    } catch (e) {
+      // If it's not JSON (Radio/Text), just return the plain string
+    }
+
+    return <p className="text-sm text-gray-700 font-medium">{rawAnswer}</p>;
+  };
+
   if (!isOpen || !user) return null;
 
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen p-4 text-center">
         <div
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+          className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity"
           onClick={onClose}
         ></div>
 
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div className="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-gray-200">
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6">
-            <div className="flex justify-between items-start mb-4">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6">
               <div className="flex items-center">
                 <img
                   src={user.avatar}
-                  className="h-12 w-12 rounded-full mr-4 border-2 border-teal-500"
+                  className="h-14 w-14 rounded-full mr-4 border-2 border-teal-500 shadow-sm"
                   alt=""
                 />
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">{user.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    {user.location || 'Location not specified'}
+                  <p className="text-sm text-gray-500 font-medium">
+                    {user.location || 'Location hidden'}
                   </p>
                 </div>
               </div>
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                <IconXCircle className="w-6 h-6" />
+              <button
+                onClick={onClose}
+                className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <IconXCircle className="w-7 h-7 text-gray-400" />
               </button>
             </div>
 
             <div className="space-y-6">
               {/* Bio Section */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-2">
-                  About
+                <h4 className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-2">
+                  Maid Bio
                 </h4>
-                <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg italic">
-                  {user.bio || 'No bio provided.'}
-                </p>
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    {user.bio || "This maid hasn't written a bio yet."}
+                  </p>
+                </div>
               </div>
 
-              {/* Experience Questionnaire */}
+              {/* Experience Questionnaire (The part we fixed) */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-2">
+                <h4 className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-3">
                   Experience Details
                 </h4>
                 {loading ? (
-                  <p className="text-xs text-gray-400">Loading answers...</p>
+                  <div className="animate-pulse flex space-y-4 flex-col">
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                  </div>
                 ) : answers.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {answers.map((a, i) => (
-                      <div key={i} className="border-l-2 border-teal-200 pl-3">
-                        <p className="text-xs font-bold text-gray-700">{a.question}</p>
-                        <p className="text-sm text-gray-600">{a.answer || 'No answer'}</p>
+                      <div key={i} className="group">
+                        <p className="text-xs font-bold text-gray-400 group-hover:text-teal-500 transition-colors">
+                          {a.question}
+                        </p>
+                        <div className="mt-1">{renderFormattedAnswer(a.answer)}</div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">No experience answers provided.</p>
+                  <p className="text-sm text-gray-400 italic">No experience data available.</p>
                 )}
               </div>
 
               {/* CV Section */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-2">
+              <div className="pt-4 border-t border-gray-100">
+                <h4 className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-3">
                   Documents
                 </h4>
                 {user.cvFileName ? (
@@ -94,24 +134,33 @@ const MaidProfileModal: React.FC<{
                     href={`/api/uploads/${user.cvFileName}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center px-4 py-2 border border-teal-600 text-teal-600 rounded-md hover:bg-teal-50 transition-colors"
+                    className="flex items-center justify-between w-full px-4 py-3 bg-white border-2 border-teal-100 rounded-xl hover:border-teal-500 hover:bg-teal-50 transition-all group"
                   >
-                    <IconFile className="w-4 h-4 mr-2" />
-                    View CV (PDF)
+                    <div className="flex items-center">
+                      <IconFile className="w-5 h-5 mr-3 text-teal-600" />
+                      <span className="text-sm font-bold text-gray-700">
+                        Curriculum Vitae (PDF)
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-teal-600 group-hover:underline">
+                      View
+                    </span>
                   </a>
                 ) : (
-                  <p className="text-xs text-gray-400 italic">No CV uploaded.</p>
+                  <div className="text-center p-4 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                    <p className="text-xs text-gray-400">No CV uploaded for this profile.</p>
+                  </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end">
+          <div className="bg-gray-50 px-6 py-4 flex justify-end">
             <button
               onClick={onClose}
-              className="text-sm font-medium text-gray-700 hover:text-gray-900"
+              className="px-6 py-2 bg-gray-900 text-white text-sm font-bold rounded-lg hover:bg-gray-800 transition-colors shadow-lg"
             >
-              Close Profile
+              Close
             </button>
           </div>
         </div>

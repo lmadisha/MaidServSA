@@ -324,50 +324,74 @@ app.put(
     const id = toUuid(req.params.id);
     const u = req.body ?? {};
 
-    const { rows } = await pool.query(
-      `
-        UPDATE users
-        SET name             = COALESCE($2, name),
-            avatar           = COALESCE($3, avatar),
-            rating           = COALESCE($4, rating),
-            rating_count     = COALESCE($5, rating_count),
-            bio              = $6,
-            location         = $7,
-            first_name       = $8,
-            middle_name      = $9,
-            surname          = $10,
-            date_of_birth    = $11,
-            place_of_birth   = $12,
-            nationality      = $13,
-            residency_status = $14,
-            address          = $15,
-            cv_file_name     = $16,
-            updated_at       = NOW()
-        WHERE id = $1
-          RETURNING ${USER_PUBLIC_SELECT};
-      `,
-      [
-        id,
-        u.name ?? null,
-        u.avatar ?? null,
-        u.rating ?? null,
-        u.ratingCount ?? null,
-        u.bio ?? null,
-        u.location ?? null,
-        u.firstName ?? null,
-        u.middleName ?? null,
-        u.surname ?? null,
-        u.dateOfBirth ?? null,
-        u.placeOfBirth ?? null,
-        u.nationality ?? null,
-        u.residencyStatus ?? null,
-        u.address ?? null,
-        u.cvFileName ?? null,
-      ]
-    );
+    const updatedUser = await withTx(async (client) => {
+      // 1. Update the main users table
+      const { rows } = await client.query(
+        `
+          UPDATE users
+          SET name             = COALESCE($2, name),
+              avatar           = COALESCE($3, avatar),
+              rating           = COALESCE($4, rating),
+              rating_count     = COALESCE($5, rating_count),
+              bio              = $6,
+              location         = $7,
+              first_name       = $8,
+              middle_name      = $9,
+              surname          = $10,
+              date_of_birth    = $11,
+              place_of_birth   = $12,
+              nationality      = $13,
+              residency_status = $14,
+              address          = $15,
+              cv_file_name     = $16,
+              updated_at       = NOW()
+          WHERE id = $1
+            RETURNING ${USER_PUBLIC_SELECT};
+        `,
+        [
+          id,
+          u.name ?? null,
+          u.avatar ?? null,
+          u.rating ?? null,
+          u.ratingCount ?? null,
+          u.bio ?? null,
+          u.location ?? null,
+          u.firstName ?? null,
+          u.middleName ?? null,
+          u.surname ?? null,
+          u.dateOfBirth ?? null,
+          u.placeOfBirth ?? null,
+          u.nationality ?? null,
+          u.residencyStatus ?? null,
+          u.address ?? null,
+          u.cvFileName ?? null,
+        ]
+      );
 
-    if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    res.json(mapUser(rows[0]));
+      if (!rows.length) return null;
+
+      // 2. Handle Experience Answers (The missing part!)
+      if (Array.isArray(u.experienceAnswers)) {
+        for (const ans of u.experienceAnswers) {
+          await client.query(
+            `
+              INSERT INTO experience_answers (user_id, question_id, question, answer)
+              VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, question_id) 
+              DO
+              UPDATE SET
+                question = EXCLUDED.question,
+                answer = EXCLUDED.answer;
+            `,
+            [id, ans.questionId, ans.question, ans.answer]
+          );
+        }
+      }
+
+      return mapUser(rows[0]);
+    });
+
+    if (!updatedUser) return res.status(404).json({ error: 'User not found' });
+    res.json(updatedUser);
   })
 );
 
@@ -596,8 +620,8 @@ app.put(
   asyncHandler(async (req, res) => {
     const jobId = toUuid(req.params.id);
     const j = req.body ?? {};
-    // 1. Fetch current status
-    const result = await withTx<{ job?: any; error?: string }>(async (client) => {
+
+    const result = await withTx<{ job?: any; error?: string } | null>(async (client) => {
       const existing = await client.query(
         `SELECT status
                                            FROM jobs
@@ -608,7 +632,7 @@ app.put(
 
       const prevStatus = existing.rows[0].status;
 
-      // 2. BLOCK update if status is not OPEN
+      // Block update if status is not OPEN
       if (prevStatus !== 'OPEN') {
         return { error: 'LOCKED' };
       }
@@ -668,50 +692,20 @@ app.put(
         );
       }
 
-      if (result.error === 'NOT_FOUND') return res.status(404).json({ error: 'Job not found' });
-      if (result.error === 'LOCKED') {
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: 'This job is already in progress and cannot be edited.',
-        });
-      }
-
-      return mapJob(updatedRow);
+      return { job: mapJob(updatedRow) };
     });
 
+    // Handle results OUTSIDE the transaction block
     if (!result) return res.status(404).json({ error: 'Job not found' });
-    res.json(result);
-  })
-);
 
-// Delete job (properly deletes dependents too)
-app.delete(
-  '/api/jobs/:id',
-  asyncHandler(async (req, res) => {
-    const jobId = toUuid(req.params.id);
+    if (result.error === 'LOCKED') {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'This job is already in progress and cannot be edited.',
+      });
+    }
 
-    await withTx(async (client) => {
-      await client.query(
-        `DELETE
-                          FROM applications
-                          WHERE job_id = $1;`,
-        [jobId]
-      );
-      await client.query(
-        `DELETE
-                          FROM job_history
-                          WHERE job_id = $1;`,
-        [jobId]
-      );
-      await client.query(
-        `DELETE
-                          FROM jobs
-                          WHERE id = $1;`,
-        [jobId]
-      );
-    });
-
-    res.json({ ok: true });
+    res.json(result.job);
   })
 );
 
