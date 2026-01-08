@@ -1,55 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { IconMapPin } from './Icons';
 
-const SA_LOCATIONS = [
-  'Cape Town City Centre',
-  'Sea Point, Cape Town',
-  'Green Point, Cape Town',
-  'Camps Bay, Cape Town',
-  'Clifton, Cape Town',
-  'Gardens, Cape Town',
-  'Vredehoek, Cape Town',
-  'Woodstock, Cape Town',
-  'Observatory, Cape Town',
-  'Claremont, Cape Town',
-  'Newlands, Cape Town',
-  'Rondebosch, Cape Town',
-  'Constantia, Cape Town',
-  'Wynberg, Cape Town',
-  'Hout Bay, Cape Town',
-  'Bloubergstrand, Cape Town',
-  'Durbanville, Cape Town',
-  'Johannesburg Central',
-  'Sandton, Johannesburg',
-  'Rosebank, Johannesburg',
-  'Bryanston, Johannesburg',
-  'Fourways, Johannesburg',
-  'Randburg, Johannesburg',
-  'Midrand, Johannesburg',
-  'Soweto, Johannesburg',
-  'Melville, Johannesburg',
-  'Parkhurst, Johannesburg',
-  'Bedfordview, Johannesburg',
-  'Pretoria Central',
-  'Centurion, Pretoria',
-  'Hatfield, Pretoria',
-  'Menlyn, Pretoria',
-  'Lynnwood, Pretoria',
-  'Durban Central',
-  'Umhlanga, Durban',
-  'Ballito, Durban',
-  'Morningside, Durban',
-  'Berea, Durban',
-  'Port Elizabeth',
-  'East London',
-  'Bloemfontein',
-  'Stellenbosch',
-  'Somerset West',
-  'George',
-  'Knysna',
-  'Plettenberg Bay',
-];
-
 interface Props {
   value: string;
   onChange: (value: string) => void;
@@ -67,11 +18,21 @@ export const LocationAutocomplete: React.FC<Props> = ({
   required,
   name,
 }) => {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [show, setShow] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // Create persistent services
+  const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
+  const sessionToken = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+
   useEffect(() => {
+    // Initialize Google Services when the component mounts
+    if (window.google && !autocompleteService.current) {
+      autocompleteService.current = new google.maps.places.AutocompleteService();
+      sessionToken.current = new google.maps.places.AutocompleteSessionToken();
+    }
+
     const handleClickOutside = (event: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setShow(false);
@@ -81,31 +42,49 @@ export const LocationAutocomplete: React.FC<Props> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const fetchSuggestions = (input: string) => {
+    if (!input || !autocompleteService.current) {
+      setSuggestions([]);
+      return;
+    }
+
+    autocompleteService.current.getPlacePredictions(
+      {
+        input,
+        sessionToken: sessionToken.current!,
+        componentRestrictions: { country: 'za' }, // Restrict to South Africa
+        types: ['geocode'], // Focus on addresses/suburbs, not specific business names
+      },
+      (predictions, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+          setSuggestions(predictions);
+          setShow(true);
+        } else {
+          setSuggestions([]);
+        }
+      }
+    );
+  };
+
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     onChange(val);
-    if (val.length > 0) {
-      const filtered = SA_LOCATIONS.filter((loc) => loc.toLowerCase().includes(val.toLowerCase()));
-      setSuggestions(filtered);
-      setShow(true);
+
+    // Debounce or delay if needed, but Google API handles fast typing well
+    if (val.length > 2) {
+      fetchSuggestions(val);
     } else {
       setShow(false);
     }
   };
 
-  const handleSelect = (loc: string) => {
-    onChange(loc);
+  const handleSelect = (prediction: google.maps.places.AutocompletePrediction) => {
+    // Use the full description (e.g., "Sandton, Johannesburg, South Africa")
+    onChange(prediction.description);
     setShow(false);
-  };
 
-  const handleFocus = () => {
-    if (value.length > 0) {
-      const filtered = SA_LOCATIONS.filter((loc) =>
-        loc.toLowerCase().includes(value.toLowerCase())
-      );
-      setSuggestions(filtered);
-      setShow(true);
-    }
+    // Refresh session token for the next search (saves money on billing)
+    sessionToken.current = new google.maps.places.AutocompleteSessionToken();
   };
 
   return (
@@ -114,25 +93,37 @@ export const LocationAutocomplete: React.FC<Props> = ({
         type="text"
         name={name}
         className={className}
-        placeholder={placeholder}
+        placeholder={placeholder || 'Start typing an address...'}
         value={value}
         onChange={handleInput}
-        onFocus={handleFocus}
+        onFocus={() => value.length > 2 && setShow(true)}
         required={required}
         autoComplete="off"
       />
+
       {show && suggestions.length > 0 && (
-        <ul className="absolute z-50 w-full bg-white border border-gray-200 mt-1.5 rounded-lg shadow-xl max-h-60 overflow-auto ring-1 ring-black ring-opacity-5 focus:outline-none transform transition-all ease-out duration-100 origin-top">
-          {suggestions.map((loc) => (
+        <ul className="absolute z-50 w-full bg-white border border-gray-200 mt-1.5 rounded-lg shadow-xl max-h-60 overflow-auto ring-1 ring-black ring-opacity-5 focus:outline-none">
+          {suggestions.map((prediction) => (
             <li
-              key={loc}
-              className="px-4 py-3 hover:bg-teal-50 cursor-pointer text-sm text-gray-700 flex items-center transition-colors duration-150 border-b border-gray-50 last:border-0"
-              onClick={() => handleSelect(loc)}
+              key={prediction.place_id}
+              className="px-4 py-3 hover:bg-teal-50 cursor-pointer text-sm text-gray-700 flex items-start transition-colors duration-150 border-b border-gray-50 last:border-0"
+              onClick={() => handleSelect(prediction)}
             >
-              <IconMapPin className="w-4 h-4 mr-3 text-teal-500 flex-shrink-0 opacity-75" />
-              <span className="truncate font-medium">{loc}</span>
+              <IconMapPin className="w-4 h-4 mr-3 text-teal-500 flex-shrink-0 mt-0.5 opacity-75" />
+              <div className="flex flex-col overflow-hidden">
+                <span className="font-bold truncate">
+                  {prediction.structured_formatting.main_text}
+                </span>
+                <span className="text-xs text-gray-400 truncate">
+                  {prediction.structured_formatting.secondary_text}
+                </span>
+              </div>
             </li>
           ))}
+          {/* Requirement for Google API to show the logo */}
+          <li className="px-4 py-2 bg-gray-50 text-[10px] text-right text-gray-400">
+            Powered by Google
+          </li>
         </ul>
       )}
     </div>
