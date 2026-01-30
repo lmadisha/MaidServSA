@@ -61,3 +61,17 @@ CREATE TRIGGER trg_user_files_updated_at
 BEFORE UPDATE ON user_files
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
+
+-- This is for the users table to have a column to store the ids of the Profile Pictures and CVs (pdf)
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS avatar_file_id uuid,
+  ADD COLUMN IF NOT EXISTS cv_file_id uuid;
+
+ALTER TABLE users
+  ADD CONSTRAINT fk_users_avatar_file
+  FOREIGN KEY (avatar_file_id) REFERENCES user_files(id) ON DELETE SET NULL;
+
+ALTER TABLE users
+  ADD CONSTRAINT fk_users_cv_file
+  FOREIGN KEY (cv_file_id) REFERENCES user_files(id) ON DELETE SET NULL;
