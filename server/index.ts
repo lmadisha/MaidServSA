@@ -8,6 +8,8 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4, v5 as uuidv5, validate as uuidValidate } from 'uuid';
 import type { PoolClient } from 'pg';
 import { pool, testDbConnection } from './db';
+import { upload, bucketName, bucket } from '../services/googleCloudStorage';
+import crypto from 'crypto';
 
 const app = express();
 
@@ -78,7 +80,8 @@ const USER_PUBLIC_SELECT = `
   first_name, middle_name, surname,
   date_of_birth, place_of_birth,
   nationality, residency_status, address,
-  cv_file_name, created_at, updated_at
+  cv_file_name, created_at, updated_at,
+  avatar_file_id, cv_file_id
 `;
 
 function mapUser(row: any) {
@@ -88,6 +91,8 @@ function mapUser(row: any) {
     email: row.email,
     role: row.role,
     avatar: row.avatar,
+    avatarFileId: row.avatar_file_id ?? null, // Add this
+    cvFileId: row.cv_file_id ?? null, // Add this
     rating: toNumber(row.rating) ?? 0,
     ratingCount: row.rating_count ?? 0,
     bio: row.bio ?? null,
@@ -344,7 +349,9 @@ app.put(
               residency_status = $14,
               address          = $15,
               cv_file_name     = $16,
-              updated_at       = NOW()
+              updated_at     = NOW(),
+              avatar_file_id = $17, -- New Column
+              cv_file_id     = $18
           WHERE id = $1
             RETURNING ${USER_PUBLIC_SELECT};
         `,
@@ -365,6 +372,8 @@ app.put(
           u.residencyStatus ?? null,
           u.address ?? null,
           u.cvFileName ?? null,
+          u.avatarFileId ?? null,
+          u.cvFileId ?? null,
         ]
       );
 
@@ -1065,6 +1074,50 @@ app.patch(
 // This is to view user's cv's and information
 
 app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// This is where the user's upload their avatars/profile pictures and the CVs
+
+app.post(
+  '/api/files/upload',
+  upload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const userId = req.body.userId; // Passed from frontend
+    const folder = req.body.folder || 'misc'; // 'avatars' or 'cvs'
+    const file = req.file;
+
+    // Generate a unique filename for GCS
+    const fileHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+    const objectKey = `${folder}/${uuidv4()}_${file.originalname}`;
+
+    // 1. Upload to GCS
+    const gcsFile = bucket.file(objectKey);
+    await gcsFile.save(file.buffer, {
+      contentType: file.mimetype,
+      resumable: false,
+    });
+
+    // 2. Insert into user_files table
+    const fileRecord = await withTx(async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO user_files (owner_user_id, original_name, mime_type, size_bytes,
+                                 storage_provider, bucket, object_key, checksum_sha256, is_public)
+         VALUES ($1, $2, $3, $4, 'gcs', $5, $6, $7, true) RETURNING id, object_key;`,
+        [userId, file.originalname, file.mimetype, file.size, bucketName, objectKey, fileHash]
+      );
+      return rows[0];
+    });
+
+    // Construct the public URL (Make sure your bucket/objects are public or use signed URLs)
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${objectKey}`;
+
+    res.status(201).json({
+      id: fileRecord.id,
+      url: publicUrl,
+    });
+  })
+);
 
 // --- errors ---
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

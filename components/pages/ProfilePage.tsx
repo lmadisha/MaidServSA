@@ -4,13 +4,42 @@ import { LocationAutocomplete } from '../LocationAutocomplete';
 import { IconFileText } from '../Icons';
 import FormSelect from './FormSelect';
 import { INPUT_CLASS, LABEL_CLASS } from './formStyles';
-import { NATIONALITIES, RESIDENCY_STATUSES } from '../../src/constants/data.ts';
+import { NATIONALITIES } from '../../src/constants/data.ts';
 import { MAID_EXPERIENCE_QUESTIONS } from '../../src/constants/questions.ts';
+import { db } from '../../services/db.ts';
 
 const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ user, onUpdate }) => {
   const [formData, setFormData] = useState<Partial<User>>({ ...user });
   const [answers, setAnswers] = useState<{ [key: string]: string }>({});
   const [cvFile, setCvFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState(user.avatar);
+  const [uploading, setUploading] = useState(false);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+
+      // 1. Show local preview immediately
+      setAvatarPreview(URL.createObjectURL(file));
+
+      try {
+        setUploading(true);
+        // 2. Upload to GCS
+        const result = await db.uploadFile(file, user.id, 'avatars');
+
+        // 3. Update form data with the new file ID and URL
+        setFormData((prev) => ({
+          ...prev,
+          avatarFileId: result.id,
+          avatar: result.url, // Use the GCS URL for immediate display
+        }));
+      } catch (err) {
+        alert('Failed to upload image.');
+      } finally {
+        setUploading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     setFormData({ ...user });
@@ -49,8 +78,40 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
     setAnswers((prev) => ({ ...prev, [questionId]: JSON.stringify(nextArray) }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) setCvFile(e.target.files[0]);
+  const [cvUploading, setCvUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+
+      // Optional: Validation
+      if (file.size > 5 * 1024 * 1024) {
+        // 5MB limit
+        alert('File is too large. Max 5MB.');
+        return;
+      }
+
+      try {
+        setCvUploading(true);
+
+        // 1. Upload the file to GCS in the 'cvs' folder
+        const result = await db.uploadFile(file, user.id, 'cvs');
+
+        // 2. Update local state with the GCS result
+        setFormData((prev) => ({
+          ...prev,
+          cvFileId: result.id, // The UUID for user_files
+          cvFileName: file.name, // The display name
+        }));
+
+        alert('CV uploaded and ready to save!');
+      } catch (err) {
+        console.error(err);
+        alert('Failed to upload CV.');
+      } finally {
+        setCvUploading(false);
+      }
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -74,6 +135,27 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      {/* Avatar Upload Section */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="relative group">
+          <img
+            src={avatarPreview || 'https://via.placeholder.com/150'}
+            className={`h-32 w-32 rounded-full object-cover border-4 border-white shadow-lg ${uploading ? 'opacity-50' : ''}`}
+            alt="Avatar"
+          />
+          <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+            <span className="text-white text-xs font-bold">Change Photo</span>
+            <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+          </label>
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-gray-500 font-medium">Click image to upload new photo</p>
+      </div>
+      {/* This is where the end of the profile page ends here */}
       <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
           <h3 className="text-lg leading-6 font-medium text-gray-900">Profile Settings</h3>
@@ -225,11 +307,15 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
                 </h4>
                 <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                   <div className="flex items-center">
-                    <IconFileText className="h-8 w-8 text-teal-500 mr-3" />
+                    <IconFileText
+                      className={`h-8 w-8 mr-3 ${cvUploading ? 'text-gray-300 animate-pulse' : 'text-teal-500'}`}
+                    />
                     <div>
-                      <p className="text-sm font-bold text-gray-900">Professional CV</p>
+                      <p className="text-sm font-bold text-gray-900">Professional CV (PDF)</p>
                       <p className="text-xs text-gray-500">
-                        {formData.cvFileName || 'No file uploaded'}
+                        {cvUploading
+                          ? 'Uploading to secure storage...'
+                          : formData.cvFileName || 'No file uploaded'}
                       </p>
                     </div>
                   </div>
@@ -238,16 +324,22 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
                       type="file"
                       accept=".pdf,.doc,.docx"
                       onChange={handleFileChange}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={cvUploading}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <button
                       type="button"
-                      className="px-3 py-2 border border-teal-600 text-teal-600 rounded-md text-xs font-bold hover:bg-teal-50"
+                      className={`px-3 py-2 border border-teal-600 text-teal-600 rounded-md text-xs font-bold hover:bg-teal-50 ${cvUploading ? 'opacity-50' : ''}`}
                     >
-                      {cvFile ? 'Change File' : 'Upload PDF'}
+                      {formData.cvFileId ? 'Change CV' : 'Upload CV'}
                     </button>
                   </div>
                 </div>
+                {formData.cvFileId && !cvUploading && (
+                  <p className="mt-2 text-[10px] text-green-600 font-medium">
+                    ✓ Document linked. Click "Update Profile" to finalize.
+                  </p>
+                )}
               </div>
             </>
           )}

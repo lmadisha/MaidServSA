@@ -129,9 +129,9 @@ const MaidProfileModal: React.FC<{
                 <h4 className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-3">
                   Documents
                 </h4>
-                {user.cvFileName ? (
+                {user.cvFileId ? (
                   <a
-                    href={`/api/uploads/${user.cvFileName}`}
+                    href={`/api/uploads/cvs/${user.cvFileName}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-between w-full px-4 py-3 bg-white border-2 border-teal-100 rounded-xl hover:border-teal-500 hover:bg-teal-50 transition-all group"
@@ -139,7 +139,7 @@ const MaidProfileModal: React.FC<{
                     <div className="flex items-center">
                       <IconFile className="w-5 h-5 mr-3 text-teal-600" />
                       <span className="text-sm font-bold text-gray-700">
-                        Curriculum Vitae (PDF)
+                        View CV ({user.cvFileName})
                       </span>
                     </div>
                     <span className="text-xs font-bold text-teal-600 group-hover:underline">
@@ -148,7 +148,7 @@ const MaidProfileModal: React.FC<{
                   </a>
                 ) : (
                   <div className="text-center p-4 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                    <p className="text-xs text-gray-400">No CV uploaded for this profile.</p>
+                    <p className="text-xs text-gray-400 italic">No CV uploaded for this profile.</p>
                   </div>
                 )}
               </div>
