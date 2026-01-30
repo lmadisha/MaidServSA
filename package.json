@@ -14,22 +14,27 @@
     "nuke": "npx kill-port 3001 && npx kill-port 5173"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
     "@google/genai": "^1.31.0",
     "@googlemaps/js-api-loader": "^2.0.2",
+    "@tailwindcss/vite": "^4.1.18",
     "argon2": "^0.44.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "multer": "^2.0.2",
     "pg": "^8.13.3",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-router-dom": "^7.10.1",
+    "tailwindcss": "^4.1.18",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/google.maps": "^3.58.1",
+    "@types/multer": "^2.0.0",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.1",
