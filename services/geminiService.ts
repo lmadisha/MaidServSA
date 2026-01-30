@@ -4,7 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 let ai: GoogleGenAI | null = null;
 
 function getAiClient(): GoogleGenAI | null {
-  const apiKey = (process.env as any)?.API_KEY as string | undefined;
+  const apiKey = (process.env as any)?.GEMINI_API_KEY as string | '';
   if (!apiKey) return null;
 
   if (!ai) {
