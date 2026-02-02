@@ -1,0 +1,15 @@
+public	applications	job_id	public	jobs	id	applications_job_id_fkey
+public	applications	maid_id	public	users	id	applications_maid_id_fkey
+public	experience_answers	user_id	public	users	id	experience_answers_user_id_fkey
+public	job_history	job_id	public	jobs	id	job_history_job_id_fkey
+public	jobs	assigned_maid_id	public	users	id	jobs_assigned_maid_id_fkey
+public	jobs	client_id	public	users	id	jobs_client_id_fkey
+public	messages	job_id	public	jobs	id	messages_job_id_fkey
+public	messages	receiver_id	public	users	id	messages_receiver_id_fkey
+public	messages	sender_id	public	users	id	messages_sender_id_fkey
+public	notifications	user_id	public	users	id	notifications_user_id_fkey
+public	reviews	job_id	public	jobs	id	reviews_job_id_fkey
+public	reviews	reviewee_id	public	users	id	reviews_reviewee_id_fkey
+public	reviews	reviewer_id	public	users	id	reviews_reviewer_id_fkey
+public	users	avatar_file_id	public	user_files	id	fk_users_avatar_file
+public	users	cv_file_id	public	user_files	id	fk_users_cv_file
