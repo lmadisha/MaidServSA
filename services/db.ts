@@ -80,6 +80,17 @@ class DBService {
     return this.updateUser(user);
   }
 
+  /**
+   * AUTH: Login
+   * POST /api/auth/login
+   */
+  async login(email: string, password: string): Promise<User> {
+    return api<User>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
   // ---------------- JOBS ----------------
   getJobs(): Promise<Job[]> {
     return api<Job[]>('/jobs');
@@ -209,6 +220,11 @@ class DBService {
 
     if (!res.ok) throw new Error('Upload failed');
     return res.json();
+  }
+
+  async getSignedUrl(fileId: string): Promise<string> {
+    const data = await api<{ url: string }>(`/files/signed-url/${fileId}`);
+    return data.url;
   }
 }
 
