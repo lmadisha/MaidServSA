@@ -312,14 +312,35 @@ app.get(
   '/api/users/:id',
   asyncHandler(async (req, res) => {
     const id = toUuid(req.params.id);
-    const { rows } = await pool.query(
+
+    // 1. Get the user
+    const userResult = await pool.query(
       `SELECT ${USER_PUBLIC_SELECT}
        FROM users
        WHERE id = $1 LIMIT 1;`,
       [id]
     );
-    if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    res.json(mapUser(rows[0]));
+    if (!userResult.rows.length) return res.status(404).json({ error: 'User not found' });
+
+    const userRow = userResult.rows[0];
+
+    // 2. Get their experience answers
+    const answersResult = await pool.query(
+      `SELECT question_id, question, answer FROM experience_answers WHERE user_id = $1`,
+      [id]
+    );
+
+    // 3. Map it all together
+    const user = {
+      ...mapUser(userRow),
+      experienceAnswers: answersResult.rows.map((r) => ({
+        questionId: r.question_id,
+        question: r.question,
+        answer: r.answer,
+      })),
+    };
+
+    res.json(user);
   })
 );
 
@@ -1116,6 +1137,41 @@ app.post(
       id: fileRecord.id,
       url: publicUrl,
     });
+  })
+);
+
+/**
+ * Generates a temporary (1 hour) signed URL for a private file
+ */
+async function generateSignedUrl(fileId: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query(`SELECT object_key FROM user_files WHERE id = $1 LIMIT 1`, [
+      toUuid(fileId),
+    ]);
+
+    if (!rows.length) return null;
+
+    const [url] = await bucket.file(rows[0].object_key).getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour from now
+    });
+
+    return url;
+  } catch (err) {
+    console.error('[GCS] Signed URL Error:', err);
+    return null;
+  }
+}
+
+app.get(
+  '/api/files/signed-url/:fileId',
+  asyncHandler(async (req, res) => {
+    const fileId = req.params.fileId;
+    const url = await generateSignedUrl(fileId);
+
+    if (!url) return res.status(404).json({ error: 'File not found' });
+    res.json({ url });
   })
 );
 

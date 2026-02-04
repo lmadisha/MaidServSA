@@ -11,30 +11,71 @@ import Navbar from './components/pages/Navbar';
 import ProfilePage from './components/pages/ProfilePage';
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // 1. IDENTITY: Persist this so we don't log out on refresh
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('maidserv_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // 2. CONTENT: Keep these as empty arrays, they load from the DB
   const [users, setUsers] = useState<User[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 3. PERSISTENCE EFFECT: Save identity when it changes
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('maidserv_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('maidserv_user');
+    }
+  }, [currentUser]);
+
+  // 4. DATA LOADING: Always fetch fresh content from the DB on mount
   useEffect(() => {
     const loadData = async () => {
-      setUsers(await db.getUsers());
-      setJobs(await db.getJobs());
-      setApplications(await db.getApplications());
-      setNotifications(await db.getNotifications());
-      setLoading(false);
+      try {
+        // Use Promise.all to load everything at once (faster)
+        const [u, j, a, n] = await Promise.all([
+          db.getUsers(),
+          db.getJobs(),
+          db.getApplications(),
+          db.getNotifications(),
+        ]);
+
+        setUsers(u);
+        setJobs(j);
+        setApplications(a);
+        setNotifications(n);
+      } catch (err) {
+        console.error('Failed to load data:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     loadData();
   }, []);
 
-  const handleLogin = (email: string) => {
-    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (user) {
-      setCurrentUser(user);
-    } else {
-      alert('User not found. Try the demo accounts or sign up.');
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      setLoading(true); // Show loading state while authenticating
+
+      // 1. Authenticate with the server
+      const loggedInUser = await db.login(email.toLowerCase(), password);
+
+      // 2. Fetch the FULL user details (this ensures experienceAnswers are loaded)
+      const fullUser = await db.getUser(loggedInUser.id);
+
+      // 3. Set the state
+      setCurrentUser(fullUser);
+    } catch (err: any) {
+      // This will catch "Invalid credentials" or "User not found" from the server
+      console.error('Login Error:', err);
+      alert(err.message || 'Login failed. Please check your email and password.');
+    } finally {
+      setLoading(false);
     }
   };
 

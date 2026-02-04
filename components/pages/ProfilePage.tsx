@@ -42,11 +42,17 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
   };
 
   useEffect(() => {
-    setFormData({ ...user });
-    if (user.experienceAnswers) {
-      const ans: { [key: string]: string } = {};
-      user.experienceAnswers.forEach((a) => (ans[a.questionId] = a.answer));
-      setAnswers(ans);
+    if (user) {
+      setFormData({ ...user });
+
+      // Populate the answers state from the array coming from the DB
+      if (user.experienceAnswers && user.experienceAnswers.length > 0) {
+        const ansMap: { [key: string]: string } = {};
+        user.experienceAnswers.forEach((a) => {
+          ansMap[a.questionId] = a.answer;
+        });
+        setAnswers(ansMap);
+      }
     }
   }, [user]);
 
@@ -63,11 +69,15 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
 
   // Helper for Multi-Select (Checkboxes)
   const handleMultiToggle = (questionId: string, option: string) => {
-    const currentRaw = answers[questionId] || '[]';
+    const currentRaw = answers[questionId];
     let currentArray: string[] = [];
+
+    // Safely parse JSON or default to empty array
     try {
-      currentArray = JSON.parse(currentRaw);
-    } catch {
+      if (currentRaw && currentRaw.startsWith('[')) {
+        currentArray = JSON.parse(currentRaw);
+      }
+    } catch (e) {
       currentArray = [];
     }
 
@@ -112,6 +122,12 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
         setCvUploading(false);
       }
     }
+  };
+
+  const viewCurrentCV = async () => {
+    if (!formData.cvFileId) return;
+    const url = await db.getSignedUrl(formData.cvFileId);
+    window.open(url, '_blank');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -339,6 +355,15 @@ const ProfilePage: React.FC<{ user: User; onUpdate: (u: User) => void }> = ({ us
                   <p className="mt-2 text-[10px] text-green-600 font-medium">
                     ✓ Document linked. Click "Update Profile" to finalize.
                   </p>
+                )}
+                {formData.cvFileId && (
+                  <button
+                    type="button"
+                    onClick={viewCurrentCV}
+                    className="mt-2 text-xs text-teal-600 hover:underline flex items-center"
+                  >
+                    <IconFileText className="w-3 h-3 mr-1" /> View your current CV
+                  </button>
                 )}
               </div>
             </>
