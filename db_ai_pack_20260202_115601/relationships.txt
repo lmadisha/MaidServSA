@@ -1,0 +1,15 @@
+public.applications.job_id -> public.jobs.id
+public.applications.maid_id -> public.users.id
+public.experience_answers.user_id -> public.users.id
+public.job_history.job_id -> public.jobs.id
+public.jobs.assigned_maid_id -> public.users.id
+public.jobs.client_id -> public.users.id
+public.messages.job_id -> public.jobs.id
+public.messages.receiver_id -> public.users.id
+public.messages.sender_id -> public.users.id
+public.notifications.user_id -> public.users.id
+public.reviews.job_id -> public.jobs.id
+public.reviews.reviewee_id -> public.users.id
+public.reviews.reviewer_id -> public.users.id
+public.users.avatar_file_id -> public.user_files.id
+public.users.cv_file_id -> public.user_files.id

@@ -80,6 +80,17 @@ class DBService {
     return this.updateUser(user);
   }
 
+  /**
+   * AUTH: Login
+   * POST /api/auth/login
+   */
+  async login(email: string, password: string): Promise<User> {
+    return api<User>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
   // ---------------- JOBS ----------------
   getJobs(): Promise<Job[]> {
     return api<Job[]>('/jobs');
@@ -189,6 +200,31 @@ class DBService {
   // Get the experince answer from maid to client
   getExperienceAnswers(userId: string): Promise<any[]> {
     return api<any[]>(`/users/${userId}/experience_answers`);
+  }
+
+  // This is for the create, update, delete of the new columns in user avatar_file_id and cv_file_id
+  async uploadFile(
+    file: File,
+    userId: string,
+    folder: 'avatars' | 'cvs'
+  ): Promise<{ id: string; url: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
+    formData.append('folder', folder);
+
+    const res = await fetch('/api/files/upload', {
+      method: 'POST',
+      body: formData, // Do NOT set Content-Type header; browser does it for FormData
+    });
+
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+  }
+
+  async getSignedUrl(fileId: string): Promise<string> {
+    const data = await api<{ url: string }>(`/files/signed-url/${fileId}`);
+    return data.url;
   }
 }
 
