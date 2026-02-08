@@ -281,11 +281,14 @@ const MessageModal: React.FC<MessageModalProps> = ({
                           setNewMessage(msg.content);
                           setAttachments([]);
                         }}
-                        className="underline"
+                        className="inline-flex items-center rounded-full border border-white/40 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition hover:bg-white/20"
                       >
                         Edit
                       </button>
-                      <button onClick={() => handleDelete(msg.id)} className="underline">
+                      <button
+                        onClick={() => handleDelete(msg.id)}
+                        className="inline-flex items-center rounded-full border border-white/40 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition hover:bg-white/20"
+                      >
                         Delete
                       </button>
                     </div>
@@ -302,7 +305,7 @@ const MessageModal: React.FC<MessageModalProps> = ({
                             setError(err?.message || 'Failed to report message.');
                           }
                         }}
-                        className="underline"
+                        className="inline-flex items-center rounded-full border border-gray-300 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600 transition hover:bg-gray-100"
                       >
                         Report
                       </button>
@@ -346,6 +349,17 @@ const MessageModal: React.FC<MessageModalProps> = ({
               value={newMessage}
               onChange={(e) => handleTyping(e.target.value)}
             />
+            <label className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50">
+              <span>Attach</span>
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => handleFileUpload(e.target.files)}
+                disabled={uploading || !!editingMessageId || attachments.length >= MAX_ATTACHMENTS}
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+              />
+            </label>
             <button
               onClick={handleSend}
               disabled={(!newMessage.trim() && attachments.length === 0) || !otherUser}
@@ -354,18 +368,8 @@ const MessageModal: React.FC<MessageModalProps> = ({
               {editingMessageId ? 'Save' : 'Send'}
             </button>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <label className="text-xs font-medium text-gray-600">
-              Attach files (PDF or images, max 100MB)
-              <input
-                type="file"
-                multiple
-                className="mt-1 block text-xs"
-                onChange={(e) => handleFileUpload(e.target.files)}
-                disabled={uploading || !!editingMessageId || attachments.length >= MAX_ATTACHMENTS}
-                accept="application/pdf,image/png,image/jpeg,image/webp"
-              />
-            </label>
+          <div className="mt-2 text-[11px] text-gray-500">
+            Attach PDF/images only • Max 100MB per file • Up to {MAX_ATTACHMENTS} files
           </div>
           {uploading && <p className="mt-2 text-xs text-gray-500">Uploading files...</p>}
         </div>
