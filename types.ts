@@ -142,10 +142,4 @@ export type MessageAttachment =
       name: string;
       mimeType: string;
       size: number;
-    }
-  | {
-      type: 'location';
-      label?: string;
-      latitude: number;
-      longitude: number;
     };

@@ -171,6 +171,20 @@ function mapNotification(row: any) {
   };
 }
 
+function mapMessageReport(row: any) {
+  return {
+    id: row.id,
+    messageId: row.message_id,
+    reporterId: row.reporter_id,
+    reason: row.reason ?? '',
+    status: row.status ?? 'OPEN',
+    createdAt: row.created_at?.toISOString?.() ?? null,
+    reviewedBy: row.reviewed_by ?? null,
+    reviewedAt: row.reviewed_at?.toISOString?.() ?? null,
+    resolutionNote: row.resolution_note ?? null,
+  };
+}
+
 function mapMessage(row: any) {
   return {
     id: row.id,
@@ -223,6 +237,11 @@ async function getMessagingParticipants(jobId: string) {
   return { clientId, maidId };
 }
 
+async function getUserRole(userId: string): Promise<string | null> {
+  const { rows } = await pool.query(`SELECT role FROM users WHERE id = $1 LIMIT 1;`, [userId]);
+  return rows[0]?.role ?? null;
+}
+
 async function ensureMessagingSchema() {
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;`);
@@ -235,6 +254,18 @@ async function ensureMessagingSchema() {
       PRIMARY KEY (message_id, user_id)
     );`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reads_user_id ON message_reads(user_id);`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS message_reports (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+      reporter_id UUID REFERENCES users(id),
+      reason TEXT,
+      status TEXT CHECK (status IN ('OPEN','REVIEWED','RESOLVED')) DEFAULT 'OPEN',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      reviewed_by UUID REFERENCES users(id),
+      reviewed_at TIMESTAMPTZ,
+      resolution_note TEXT
+    );`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reports_status ON message_reports(status);`);
 }
 
 function normalizeAttachments(input: any): any[] {
@@ -244,6 +275,31 @@ function normalizeAttachments(input: any): any[] {
     .map((item) => ({
       ...item,
     }));
+}
+
+function validateAttachments(attachments: any[]): { valid: boolean; error?: string } {
+  const allowedMimeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+  const maxSize = 100 * 1024 * 1024;
+  const maxCount = 10;
+
+  if (attachments.length > maxCount) {
+    return { valid: false, error: `You can attach up to ${maxCount} files.` };
+  }
+
+  for (const attachment of attachments) {
+    if (attachment?.type !== 'file') {
+      return { valid: false, error: 'Only file attachments are supported.' };
+    }
+    if (!allowedMimeTypes.includes(String(attachment.mimeType ?? ''))) {
+      return { valid: false, error: 'Only PDF or image attachments are allowed.' };
+    }
+    const size = Number(attachment.size ?? 0);
+    if (!Number.isFinite(size) || size > maxSize) {
+      return { valid: false, error: 'Each file must be 100MB or less.' };
+    }
+  }
+
+  return { valid: true };
 }
 
 // --- health ---
@@ -1117,19 +1173,22 @@ app.get(
     const jobId = toUuid(jobIdRaw);
     const userId = toUuid(userIdRaw);
 
-    const participants = await getMessagingParticipants(jobId);
-    if ('error' in participants) {
-      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
-      return res.status(status).json({
-        error:
-          participants.error === 'NOT_FOUND'
-            ? 'Job not found.'
-            : 'Messaging is only available while a job is in progress.',
-      });
-    }
+    const role = await getUserRole(userId);
+    if (role !== 'ADMIN') {
+      const participants = await getMessagingParticipants(jobId);
+      if ('error' in participants) {
+        const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+        return res.status(status).json({
+          error:
+            participants.error === 'NOT_FOUND'
+              ? 'Job not found.'
+              : 'Messaging is only available while a job is in progress.',
+        });
+      }
 
-    if (![participants.clientId, participants.maidId].includes(userId)) {
-      return res.status(403).json({ error: 'You do not have access to this conversation.' });
+      if (![participants.clientId, participants.maidId].includes(userId)) {
+        return res.status(403).json({ error: 'You do not have access to this conversation.' });
+      }
     }
 
     const { rows } = await pool.query(
@@ -1155,13 +1214,22 @@ app.post(
   asyncHandler(async (req, res) => {
     const m = req.body ?? {};
     const jobId = toUuid(String(m.jobId ?? ''));
-    const senderId = toUuid(String(m.senderId ?? ''));
-    const receiverId = toUuid(String(m.receiverId ?? ''));
+    const senderIdRaw = String(m.senderId ?? '');
+    const receiverIdRaw = String(m.receiverId ?? '');
+    if (!senderIdRaw || !receiverIdRaw) {
+      return res.status(400).json({ error: 'senderId and receiverId are required.' });
+    }
+    const senderId = toUuid(senderIdRaw);
+    const receiverId = toUuid(receiverIdRaw);
     const content = String(m.content ?? '').trim();
     const attachments = normalizeAttachments(m.attachments);
 
     if (!content && attachments.length === 0) {
       return res.status(400).json({ error: 'Message content or attachments are required.' });
+    }
+    const attachmentValidation = validateAttachments(attachments);
+    if (!attachmentValidation.valid) {
+      return res.status(400).json({ error: attachmentValidation.error });
     }
 
     const participants = await getMessagingParticipants(jobId);
@@ -1214,19 +1282,21 @@ app.patch(
     if (!messageQ.rowCount) return res.status(404).json({ error: 'Message not found.' });
 
     const jobId = messageQ.rows[0].job_id;
-    const participants = await getMessagingParticipants(jobId);
-    if ('error' in participants) {
-      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
-      return res.status(status).json({
-        error:
-          participants.error === 'NOT_FOUND'
-            ? 'Job not found.'
-            : 'Messaging is only available while a job is in progress.',
-      });
+    const senderRole = await getUserRole(senderId);
+    if (senderRole !== 'ADMIN') {
+      const participants = await getMessagingParticipants(jobId);
+      if ('error' in participants) {
+        const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+        return res.status(status).json({
+          error:
+            participants.error === 'NOT_FOUND'
+              ? 'Job not found.'
+              : 'Messaging is only available while a job is in progress.',
+        });
+      }
     }
-
-    if (messageQ.rows[0].sender_id !== senderId) {
-      return res.status(403).json({ error: 'Only the sender can edit this message.' });
+    if (messageQ.rows[0].sender_id !== senderId && senderRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Only the sender or an admin can edit this message.' });
     }
     if (messageQ.rows[0].deleted_at) {
       return res.status(400).json({ error: 'Deleted messages cannot be edited.' });
@@ -1265,19 +1335,21 @@ app.delete(
     if (!messageQ.rowCount) return res.status(404).json({ error: 'Message not found.' });
 
     const jobId = messageQ.rows[0].job_id;
-    const participants = await getMessagingParticipants(jobId);
-    if ('error' in participants) {
-      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
-      return res.status(status).json({
-        error:
-          participants.error === 'NOT_FOUND'
-            ? 'Job not found.'
-            : 'Messaging is only available while a job is in progress.',
-      });
+    const senderRole = await getUserRole(senderId);
+    if (senderRole !== 'ADMIN') {
+      const participants = await getMessagingParticipants(jobId);
+      if ('error' in participants) {
+        const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+        return res.status(status).json({
+          error:
+            participants.error === 'NOT_FOUND'
+              ? 'Job not found.'
+              : 'Messaging is only available while a job is in progress.',
+        });
+      }
     }
-
-    if (messageQ.rows[0].sender_id !== senderId) {
-      return res.status(403).json({ error: 'Only the sender can delete this message.' });
+    if (messageQ.rows[0].sender_id !== senderId && senderRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Only the sender or an admin can delete this message.' });
     }
     if (messageQ.rows[0].deleted_at) {
       return res.status(400).json({ error: 'Message already deleted.' });
@@ -1348,6 +1420,134 @@ app.post(
     }
 
     res.json({ messageIds, readAt });
+  })
+);
+
+app.post(
+  '/api/messages/:id/report',
+  asyncHandler(async (req, res) => {
+    const messageId = toUuid(req.params.id);
+    const reporterIdRaw = String(req.body?.reporterId ?? '');
+    const reason = String(req.body?.reason ?? '').trim();
+    if (!reporterIdRaw) return res.status(400).json({ error: 'reporterId is required.' });
+    if (!reason) return res.status(400).json({ error: 'Reason is required.' });
+    const reporterId = toUuid(reporterIdRaw);
+
+    const { rows } = await pool.query(
+      `SELECT id, job_id
+       FROM messages
+       WHERE id = $1 LIMIT 1;`,
+      [messageId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Message not found.' });
+
+    const participants = await getMessagingParticipants(rows[0].job_id);
+    if ('error' in participants) {
+      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+      return res.status(status).json({
+        error:
+          participants.error === 'NOT_FOUND'
+            ? 'Job not found.'
+            : 'Messaging is only available while a job is in progress.',
+      });
+    }
+
+    if (![participants.clientId, participants.maidId].includes(reporterId)) {
+      return res.status(403).json({ error: 'You do not have access to this conversation.' });
+    }
+
+    await pool.query(
+      `
+        INSERT INTO message_reports (id, message_id, reporter_id, reason, status, created_at)
+        VALUES ($1, $2, $3, $4, 'OPEN', NOW());
+      `,
+      [uuidv4(), messageId, reporterId, reason]
+    );
+
+    res.status(201).json({ ok: true });
+  })
+);
+
+app.get(
+  '/api/admin/message-reports',
+  asyncHandler(async (req, res) => {
+    const adminIdRaw = String(req.query.adminId ?? '');
+    if (!adminIdRaw) return res.status(400).json({ error: 'adminId is required.' });
+    const adminId = toUuid(adminIdRaw);
+    const role = await getUserRole(adminId);
+    if (role !== 'ADMIN') return res.status(403).json({ error: 'Admin access required.' });
+
+    const { rows } = await pool.query(
+      `
+        SELECT id, message_id, reporter_id, reason, status, created_at, reviewed_by, reviewed_at, resolution_note
+        FROM message_reports
+        ORDER BY created_at DESC;
+      `
+    );
+
+    res.json(rows.map(mapMessageReport));
+  })
+);
+
+app.patch(
+  '/api/admin/message-reports/:id',
+  asyncHandler(async (req, res) => {
+    const reportId = toUuid(req.params.id);
+    const adminIdRaw = String(req.body?.adminId ?? '');
+    const status = String(req.body?.status ?? '').toUpperCase();
+    const resolutionNote = String(req.body?.resolutionNote ?? '').trim();
+    if (!adminIdRaw) return res.status(400).json({ error: 'adminId is required.' });
+    const adminId = toUuid(adminIdRaw);
+    const role = await getUserRole(adminId);
+    if (role !== 'ADMIN') return res.status(403).json({ error: 'Admin access required.' });
+    if (!['OPEN', 'REVIEWED', 'RESOLVED'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status.' });
+    }
+
+    const { rows } = await pool.query(
+      `
+        UPDATE message_reports
+        SET status = $2,
+            reviewed_by = $3,
+            reviewed_at = NOW(),
+            resolution_note = $4
+        WHERE id = $1
+        RETURNING id, message_id, reporter_id, reason, status, created_at, reviewed_by, reviewed_at, resolution_note;
+      `,
+      [reportId, status, adminId, resolutionNote || null]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: 'Report not found.' });
+    res.json(mapMessageReport(rows[0]));
+  })
+);
+
+app.patch(
+  '/api/admin/messages/:id/redact',
+  asyncHandler(async (req, res) => {
+    const messageId = toUuid(req.params.id);
+    const adminIdRaw = String(req.body?.adminId ?? '');
+    if (!adminIdRaw) return res.status(400).json({ error: 'adminId is required.' });
+    const adminId = toUuid(adminIdRaw);
+    const role = await getUserRole(adminId);
+    if (role !== 'ADMIN') return res.status(403).json({ error: 'Admin access required.' });
+
+    const { rows } = await pool.query(
+      `
+        UPDATE messages
+        SET content = '[redacted]',
+            attachments = '[]'::jsonb,
+            edited_at = NOW()
+        WHERE id = $1
+        RETURNING id, job_id, sender_id, receiver_id, content, attachments, edited_at, deleted_at, timestamp;
+      `,
+      [messageId]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: 'Message not found.' });
+    const message = mapMessage(rows[0]);
+    broadcastToJob(message.jobId, { type: 'message.updated', payload: message });
+    res.json(message);
   })
 );
 
@@ -1432,6 +1632,17 @@ app.post(
     const userId = req.body.userId; // Passed from frontend
     const folder = req.body.folder || 'misc'; // 'avatars' or 'cvs'
     const file = req.file;
+    const allowedMessageTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    const maxMessageFileSize = 100 * 1024 * 1024;
+
+    if (folder === 'messages') {
+      if (!allowedMessageTypes.includes(file.mimetype)) {
+        return res.status(400).json({ error: 'Only PDF or image files are allowed.' });
+      }
+      if (file.size > maxMessageFileSize) {
+        return res.status(400).json({ error: 'File size must be 100MB or less.' });
+      }
+    }
 
     // Generate a unique filename for GCS
     const fileHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
@@ -1536,15 +1747,18 @@ wss.on('connection', async (socket, req) => {
 
     const jobId = toUuid(jobIdRaw);
     const userId = toUuid(userIdRaw);
-    const participants = await getMessagingParticipants(jobId);
-    if ('error' in participants) {
-      socket.close(1008, 'Messaging not available');
-      return;
-    }
+    const role = await getUserRole(userId);
+    if (role !== 'ADMIN') {
+      const participants = await getMessagingParticipants(jobId);
+      if ('error' in participants) {
+        socket.close(1008, 'Messaging not available');
+        return;
+      }
 
-    if (![participants.clientId, participants.maidId].includes(userId)) {
-      socket.close(1008, 'Unauthorized');
-      return;
+      if (![participants.clientId, participants.maidId].includes(userId)) {
+        socket.close(1008, 'Unauthorized');
+        return;
+      }
     }
 
     socket.jobId = jobId;

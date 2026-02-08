@@ -257,6 +257,13 @@ class DBService {
       body: JSON.stringify({ jobId, userId }),
     });
   }
+
+  reportMessage(messageId: string, reporterId: string, reason: string): Promise<void> {
+    return api<void>(`/messages/${messageId}/report`, {
+      method: 'POST',
+      body: JSON.stringify({ reporterId, reason }),
+    });
+  }
 }
 
 export const db = new DBService();

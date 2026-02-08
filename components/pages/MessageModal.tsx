@@ -27,9 +27,9 @@ const MessageModal: React.FC<MessageModalProps> = ({
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const typingTimeoutRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
-  const [locationLabel, setLocationLabel] = useState('');
-  const [locationLat, setLocationLat] = useState('');
-  const [locationLng, setLocationLng] = useState('');
+  const MAX_ATTACHMENTS = 10;
+  const MAX_FILE_SIZE = 100 * 1024 * 1024;
+  const allowedMimeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
 
   const sortedMessages = useMemo(
     () =>
@@ -148,11 +148,23 @@ const MessageModal: React.FC<MessageModalProps> = ({
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || !job) return;
+    if (attachments.length >= MAX_ATTACHMENTS) {
+      setError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
+      const remainingSlots = MAX_ATTACHMENTS - attachments.length;
+      const incoming = Array.from(files).slice(0, remainingSlots);
       const uploads = await Promise.all(
-        Array.from(files).map(async (file) => {
+        incoming.map(async (file) => {
+          if (!allowedMimeTypes.includes(file.type)) {
+            throw new Error('Only PDF or image files are allowed.');
+          }
+          if (file.size > MAX_FILE_SIZE) {
+            throw new Error('File size must be 100MB or less.');
+          }
           const result = await db.uploadFile(file, currentUser.id, 'messages');
           const attachment: MessageAttachment = {
             type: 'file',
@@ -171,25 +183,6 @@ const MessageModal: React.FC<MessageModalProps> = ({
     } finally {
       setUploading(false);
     }
-  };
-
-  const handleAddLocation = () => {
-    const latitude = Number(locationLat);
-    const longitude = Number(locationLng);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      setError('Please enter valid latitude and longitude.');
-      return;
-    }
-    const attachment: MessageAttachment = {
-      type: 'location',
-      label: locationLabel.trim() || undefined,
-      latitude,
-      longitude,
-    };
-    setAttachments((prev) => [...prev, attachment]);
-    setLocationLabel('');
-    setLocationLat('');
-    setLocationLng('');
   };
 
   const handleTyping = (value: string) => {
@@ -251,27 +244,17 @@ const MessageModal: React.FC<MessageModalProps> = ({
                       {msg.content && <p>{msg.content}</p>}
                       {msg.attachments?.length ? (
                         <div className="mt-2 space-y-1">
-                          {msg.attachments.map((attachment, index) => {
-                            if (attachment.type === 'file') {
-                              return (
-                                <a
-                                  key={`${msg.id}-file-${index}`}
-                                  href={attachment.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className={`block underline ${isMine ? 'text-teal-100' : 'text-teal-700'}`}
-                                >
-                                  {attachment.name}
-                                </a>
-                              );
-                            }
-                            return (
-                              <div key={`${msg.id}-loc-${index}`} className="text-xs">
-                                📍 {attachment.label || 'Location'} ({attachment.latitude},{' '}
-                                {attachment.longitude})
-                              </div>
-                            );
-                          })}
+                          {msg.attachments.map((attachment, index) => (
+                            <a
+                              key={`${msg.id}-file-${index}`}
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`block underline ${isMine ? 'text-teal-100' : 'text-teal-700'}`}
+                            >
+                              {attachment.name}
+                            </a>
+                          ))}
                         </div>
                       ) : null}
                     </>
@@ -298,6 +281,24 @@ const MessageModal: React.FC<MessageModalProps> = ({
                       </button>
                     </div>
                   )}
+                  {!isMine && !msg.deletedAt && (
+                    <div className="mt-2 flex gap-2 text-xs">
+                      <button
+                        onClick={async () => {
+                          const reason = window.prompt('Why are you reporting this message?');
+                          if (!reason) return;
+                          try {
+                            await db.reportMessage(msg.id, currentUser.id, reason);
+                          } catch (err: any) {
+                            setError(err?.message || 'Failed to report message.');
+                          }
+                        }}
+                        className="underline"
+                      >
+                        Report
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -315,9 +316,7 @@ const MessageModal: React.FC<MessageModalProps> = ({
                   key={`pending-${index}`}
                   className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-2 py-1"
                 >
-                  {attachment.type === 'file'
-                    ? attachment.name
-                    : attachment.label || 'Location'}
+                  {attachment.name}
                   <button
                     onClick={() =>
                       setAttachments((prev) => prev.filter((_, i) => i !== index))
@@ -348,45 +347,16 @@ const MessageModal: React.FC<MessageModalProps> = ({
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <label className="text-xs font-medium text-gray-600">
-              Attach files
+              Attach files (PDF or images, max 100MB)
               <input
                 type="file"
                 multiple
                 className="mt-1 block text-xs"
                 onChange={(e) => handleFileUpload(e.target.files)}
-                disabled={uploading || !!editingMessageId}
+                disabled={uploading || !!editingMessageId || attachments.length >= MAX_ATTACHMENTS}
+                accept="application/pdf,image/png,image/jpeg,image/webp"
               />
             </label>
-            <div className="flex items-center gap-2 text-xs">
-              <input
-                type="text"
-                placeholder="Location label"
-                value={locationLabel}
-                onChange={(e) => setLocationLabel(e.target.value)}
-                className="border rounded px-2 py-1"
-              />
-              <input
-                type="text"
-                placeholder="Lat"
-                value={locationLat}
-                onChange={(e) => setLocationLat(e.target.value)}
-                className="border rounded px-2 py-1 w-24"
-              />
-              <input
-                type="text"
-                placeholder="Lng"
-                value={locationLng}
-                onChange={(e) => setLocationLng(e.target.value)}
-                className="border rounded px-2 py-1 w-24"
-              />
-              <button
-                onClick={handleAddLocation}
-                className="text-teal-600 hover:text-teal-800"
-                type="button"
-              >
-                Add location
-              </button>
-            </div>
           </div>
           {uploading && <p className="mt-2 text-xs text-gray-500">Uploading files...</p>}
         </div>
