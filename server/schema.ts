@@ -92,7 +92,30 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
     sender_id UUID REFERENCES users(id),
     receiver_id UUID REFERENCES users(id),
     content TEXT NOT NULL,
+    attachments JSONB DEFAULT '[]'::jsonb,
+    edited_at TIMESTAMPTZ,
+    deleted_at TIMESTAMPTZ,
+    deleted_by UUID REFERENCES users(id),
     timestamp TIMESTAMPTZ DEFAULT NOW()
+  );`,
+  `CREATE TABLE IF NOT EXISTS message_reads
+    (
+    message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id),
+    read_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (message_id, user_id)
+  );`,
+  `CREATE TABLE IF NOT EXISTS message_reports
+    (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+    reporter_id UUID REFERENCES users(id),
+    reason TEXT,
+    status TEXT CHECK (status IN ('OPEN','REVIEWED','RESOLVED')) DEFAULT 'OPEN',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    reviewed_by UUID REFERENCES users(id),
+    reviewed_at TIMESTAMPTZ,
+    resolution_note TEXT
   );`,
 
   `CREATE TABLE IF NOT EXISTS reviews
@@ -129,6 +152,8 @@ export const POSTGRES_SCHEMA_QUERIES: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);`,
   `CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);`,
   `CREATE INDEX IF NOT EXISTS idx_messages_job_id ON messages(job_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_message_reads_user_id ON message_reads(user_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_message_reports_status ON message_reports(status);`,
   `CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON reviews(reviewee_id);`,
   `CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);`,
 ];
