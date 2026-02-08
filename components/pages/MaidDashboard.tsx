@@ -132,7 +132,8 @@ const MaidDashboard: React.FC<{
               const app = applications.find((a) => a.jobId === job.id && a.maidId === user.id);
               const client = users.find((u) => u.id === job.clientId);
               const canMessage =
-                app?.status === ApplicationStatus.ACCEPTED || job.assignedMaidId === user.id;
+                job.status === JobStatus.IN_PROGRESS &&
+                (app?.status === ApplicationStatus.ACCEPTED || job.assignedMaidId === user.id);
               return (
                 <li key={job.id} className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">

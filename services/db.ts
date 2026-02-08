@@ -206,7 +206,7 @@ class DBService {
   async uploadFile(
     file: File,
     userId: string,
-    folder: 'avatars' | 'cvs'
+    folder: 'avatars' | 'cvs' | 'messages'
   ): Promise<{ id: string; url: string }> {
     const formData = new FormData();
     formData.append('file', file);
@@ -235,6 +235,27 @@ class DBService {
 
   createMessage(message: Partial<Message>): Promise<Message> {
     return api<Message>('/messages', { method: 'POST', body: JSON.stringify(message) });
+  }
+
+  updateMessage(messageId: string, content: string, senderId: string): Promise<Message> {
+    return api<Message>(`/messages/${messageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content, senderId }),
+    });
+  }
+
+  deleteMessage(messageId: string, senderId: string): Promise<Message> {
+    return api<Message>(`/messages/${messageId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ senderId }),
+    });
+  }
+
+  markMessagesRead(jobId: string, userId: string): Promise<{ messageIds: string[]; readAt: string }> {
+    return api<{ messageIds: string[]; readAt: string }>(`/messages/read`, {
+      method: 'POST',
+      body: JSON.stringify({ jobId, userId }),
+    });
   }
 }
 

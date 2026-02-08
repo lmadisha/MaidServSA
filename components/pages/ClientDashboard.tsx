@@ -185,7 +185,10 @@ const ClientDashboard: React.FC<{
                     <ul className="divide-y divide-gray-200">
                       {jobApps.map((app) => {
                         const maid = users.find((u) => u.id === app.maidId);
-                        const canMessage = app.status === ApplicationStatus.ACCEPTED && maid;
+                        const canMessage =
+                          app.status === ApplicationStatus.ACCEPTED &&
+                          job.status === JobStatus.IN_PROGRESS &&
+                          maid;
                         return (
                           <li key={app.id} className="py-3 flex justify-between items-center">
                             <div className="flex items-center">

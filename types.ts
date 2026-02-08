@@ -128,4 +128,24 @@ export interface Message {
   content: string;
   timestamp: string;
   jobId: string;
+  attachments?: MessageAttachment[];
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  readAt?: string | null;
 }
+
+export type MessageAttachment =
+  | {
+      type: 'file';
+      fileId: string;
+      url: string;
+      name: string;
+      mimeType: string;
+      size: number;
+    }
+  | {
+      type: 'location';
+      label?: string;
+      latitude: number;
+      longitude: number;
+    };

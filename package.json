@@ -29,7 +29,8 @@
     "react-dom": "^19.2.1",
     "react-router-dom": "^7.10.1",
     "tailwindcss": "^4.1.18",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

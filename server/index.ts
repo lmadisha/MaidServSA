@@ -10,6 +10,8 @@ import type { PoolClient } from 'pg';
 import { pool, testDbConnection } from './db';
 import { upload, bucketName, bucket } from '../services/googleCloudStorage';
 import crypto from 'crypto';
+import http from 'http';
+import { WebSocketServer } from 'ws';
 
 const app = express();
 
@@ -176,13 +178,17 @@ function mapMessage(row: any) {
     senderId: row.sender_id,
     receiverId: row.receiver_id,
     content: row.content,
+    attachments: row.attachments ?? [],
+    editedAt: row.edited_at?.toISOString?.() ?? null,
+    deletedAt: row.deleted_at?.toISOString?.() ?? null,
+    readAt: row.read_at?.toISOString?.() ?? null,
     timestamp: row.timestamp?.toISOString?.() ?? null,
   };
 }
 
 async function getMessagingParticipants(jobId: string) {
   const jobQ = await pool.query(
-    `SELECT id, client_id, assigned_maid_id
+    `SELECT id, client_id, assigned_maid_id, status
      FROM jobs
      WHERE id = $1 LIMIT 1;`,
     [jobId]
@@ -192,9 +198,12 @@ async function getMessagingParticipants(jobId: string) {
     return { error: 'NOT_FOUND' as const };
   }
 
-  const { client_id: clientId, assigned_maid_id: maidId } = jobQ.rows[0];
+  const { client_id: clientId, assigned_maid_id: maidId, status } = jobQ.rows[0];
 
   if (!maidId) {
+    return { error: 'NOT_READY' as const };
+  }
+  if (status !== 'IN_PROGRESS') {
     return { error: 'NOT_READY' as const };
   }
 
@@ -212,6 +221,29 @@ async function getMessagingParticipants(jobId: string) {
   }
 
   return { clientId, maidId };
+}
+
+async function ensureMessagingSchema() {
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_by UUID;`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS message_reads (
+      message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id),
+      read_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (message_id, user_id)
+    );`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reads_user_id ON message_reads(user_id);`);
+}
+
+function normalizeAttachments(input: any): any[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      ...item,
+    }));
 }
 
 // --- health ---
@@ -1092,7 +1124,7 @@ app.get(
         error:
           participants.error === 'NOT_FOUND'
             ? 'Job not found.'
-            : 'Messaging is only available after a maid is accepted.',
+            : 'Messaging is only available while a job is in progress.',
       });
     }
 
@@ -1102,10 +1134,14 @@ app.get(
 
     const { rows } = await pool.query(
       `
-        SELECT id, job_id, sender_id, receiver_id, content, timestamp
-        FROM messages
-        WHERE job_id = $1
-        ORDER BY timestamp ASC;
+        SELECT m.id, m.job_id, m.sender_id, m.receiver_id, m.content,
+               m.attachments, m.edited_at, m.deleted_at, m.timestamp,
+               mr.read_at
+        FROM messages m
+        LEFT JOIN message_reads mr
+          ON mr.message_id = m.id AND mr.user_id = m.receiver_id
+        WHERE m.job_id = $1
+        ORDER BY m.timestamp ASC;
       `,
       [jobId]
     );
@@ -1122,9 +1158,10 @@ app.post(
     const senderId = toUuid(String(m.senderId ?? ''));
     const receiverId = toUuid(String(m.receiverId ?? ''));
     const content = String(m.content ?? '').trim();
+    const attachments = normalizeAttachments(m.attachments);
 
-    if (!content) {
-      return res.status(400).json({ error: 'Message content is required.' });
+    if (!content && attachments.length === 0) {
+      return res.status(400).json({ error: 'Message content or attachments are required.' });
     }
 
     const participants = await getMessagingParticipants(jobId);
@@ -1134,7 +1171,7 @@ app.post(
         error:
           participants.error === 'NOT_FOUND'
             ? 'Job not found.'
-            : 'Messaging is only available after a maid is accepted.',
+            : 'Messaging is only available while a job is in progress.',
       });
     }
 
@@ -1146,14 +1183,171 @@ app.post(
     const id = uuidv4();
     const { rows } = await pool.query(
       `
-        INSERT INTO messages (id, job_id, sender_id, receiver_id, content, timestamp)
-        VALUES ($1, $2, $3, $4, $5, NOW())
-        RETURNING id, job_id, sender_id, receiver_id, content, timestamp;
+        INSERT INTO messages (id, job_id, sender_id, receiver_id, content, attachments, timestamp)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        RETURNING id, job_id, sender_id, receiver_id, content, attachments, edited_at, deleted_at, timestamp;
       `,
-      [id, jobId, senderId, receiverId, content]
+      [id, jobId, senderId, receiverId, content, JSON.stringify(attachments)]
     );
 
+    broadcastToJob(jobId, { type: 'message.created', payload: mapMessage(rows[0]) });
     res.status(201).json(mapMessage(rows[0]));
+  })
+);
+
+app.patch(
+  '/api/messages/:id',
+  asyncHandler(async (req, res) => {
+    const messageId = toUuid(req.params.id);
+    const content = String(req.body?.content ?? '').trim();
+    const senderIdRaw = String(req.body?.senderId ?? '');
+    if (!senderIdRaw) return res.status(400).json({ error: 'senderId is required.' });
+    const senderId = toUuid(senderIdRaw);
+    if (!content) return res.status(400).json({ error: 'Message content is required.' });
+
+    const messageQ = await pool.query(
+      `SELECT id, job_id, sender_id, deleted_at
+       FROM messages
+       WHERE id = $1 LIMIT 1;`,
+      [messageId]
+    );
+    if (!messageQ.rowCount) return res.status(404).json({ error: 'Message not found.' });
+
+    const jobId = messageQ.rows[0].job_id;
+    const participants = await getMessagingParticipants(jobId);
+    if ('error' in participants) {
+      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+      return res.status(status).json({
+        error:
+          participants.error === 'NOT_FOUND'
+            ? 'Job not found.'
+            : 'Messaging is only available while a job is in progress.',
+      });
+    }
+
+    if (messageQ.rows[0].sender_id !== senderId) {
+      return res.status(403).json({ error: 'Only the sender can edit this message.' });
+    }
+    if (messageQ.rows[0].deleted_at) {
+      return res.status(400).json({ error: 'Deleted messages cannot be edited.' });
+    }
+
+    const { rows } = await pool.query(
+      `
+        UPDATE messages
+        SET content = $2,
+            edited_at = NOW()
+        WHERE id = $1
+        RETURNING id, job_id, sender_id, receiver_id, content, attachments, edited_at, deleted_at, timestamp;
+      `,
+      [messageId, content]
+    );
+
+    const message = mapMessage(rows[0]);
+    broadcastToJob(message.jobId, { type: 'message.updated', payload: message });
+    res.json(message);
+  })
+);
+
+app.delete(
+  '/api/messages/:id',
+  asyncHandler(async (req, res) => {
+    const messageId = toUuid(req.params.id);
+    const senderIdRaw = String(req.body?.senderId ?? '');
+    if (!senderIdRaw) return res.status(400).json({ error: 'senderId is required.' });
+    const senderId = toUuid(senderIdRaw);
+    const messageQ = await pool.query(
+      `SELECT id, job_id, sender_id, deleted_at
+       FROM messages
+       WHERE id = $1 LIMIT 1;`,
+      [messageId]
+    );
+    if (!messageQ.rowCount) return res.status(404).json({ error: 'Message not found.' });
+
+    const jobId = messageQ.rows[0].job_id;
+    const participants = await getMessagingParticipants(jobId);
+    if ('error' in participants) {
+      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+      return res.status(status).json({
+        error:
+          participants.error === 'NOT_FOUND'
+            ? 'Job not found.'
+            : 'Messaging is only available while a job is in progress.',
+      });
+    }
+
+    if (messageQ.rows[0].sender_id !== senderId) {
+      return res.status(403).json({ error: 'Only the sender can delete this message.' });
+    }
+    if (messageQ.rows[0].deleted_at) {
+      return res.status(400).json({ error: 'Message already deleted.' });
+    }
+
+    const { rows } = await pool.query(
+      `
+        UPDATE messages
+        SET content = '',
+            attachments = '[]'::jsonb,
+            deleted_at = NOW(),
+            deleted_by = $2
+        WHERE id = $1
+        RETURNING id, job_id, sender_id, receiver_id, content, attachments, edited_at, deleted_at, timestamp;
+      `,
+      [messageId, senderId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Message not found.' });
+    const message = mapMessage(rows[0]);
+    broadcastToJob(message.jobId, { type: 'message.deleted', payload: message });
+    res.json(message);
+  })
+);
+
+app.post(
+  '/api/messages/read',
+  asyncHandler(async (req, res) => {
+    const jobId = toUuid(String(req.body?.jobId ?? ''));
+    const userId = toUuid(String(req.body?.userId ?? ''));
+
+    const participants = await getMessagingParticipants(jobId);
+    if ('error' in participants) {
+      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+      return res.status(status).json({
+        error:
+          participants.error === 'NOT_FOUND'
+            ? 'Job not found.'
+            : 'Messaging is only available while a job is in progress.',
+      });
+    }
+
+    if (![participants.clientId, participants.maidId].includes(userId)) {
+      return res.status(403).json({ error: 'You do not have access to this conversation.' });
+    }
+
+    const { rows } = await pool.query(
+      `
+        INSERT INTO message_reads (message_id, user_id, read_at)
+        SELECT id, $2, NOW()
+        FROM messages
+        WHERE job_id = $1
+          AND receiver_id = $2
+          AND deleted_at IS NULL
+        ON CONFLICT (message_id, user_id) DO NOTHING
+        RETURNING message_id, read_at;
+      `,
+      [jobId, userId]
+    );
+
+    const readAt = rows[0]?.read_at?.toISOString?.() ?? new Date().toISOString();
+    const messageIds = rows.map((r) => r.message_id);
+
+    if (messageIds.length) {
+      broadcastToJob(jobId, {
+        type: 'message.read',
+        payload: { messageIds, readAt, readerId: userId },
+      });
+    }
+
+    res.json({ messageIds, readAt });
   })
 );
 
@@ -1314,6 +1508,83 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: msg });
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+const wss = new WebSocketServer({ server, path: '/api/ws/messages' });
+const jobSockets = new Map<string, Set<any>>();
+
+function broadcastToJob(jobId: string, payload: any) {
+  const sockets = jobSockets.get(jobId);
+  if (!sockets) return;
+  const message = JSON.stringify(payload);
+  for (const socket of sockets) {
+    if (socket.readyState === socket.OPEN) {
+      socket.send(message);
+    }
+  }
+}
+
+wss.on('connection', async (socket, req) => {
+  try {
+    const url = new URL(req.url ?? '', `http://${req.headers.host}`);
+    const jobIdRaw = String(url.searchParams.get('jobId') ?? '');
+    const userIdRaw = String(url.searchParams.get('userId') ?? '');
+    if (!jobIdRaw || !userIdRaw) {
+      socket.close(1008, 'Missing jobId/userId');
+      return;
+    }
+
+    const jobId = toUuid(jobIdRaw);
+    const userId = toUuid(userIdRaw);
+    const participants = await getMessagingParticipants(jobId);
+    if ('error' in participants) {
+      socket.close(1008, 'Messaging not available');
+      return;
+    }
+
+    if (![participants.clientId, participants.maidId].includes(userId)) {
+      socket.close(1008, 'Unauthorized');
+      return;
+    }
+
+    socket.jobId = jobId;
+    socket.userId = userId;
+
+    if (!jobSockets.has(jobId)) {
+      jobSockets.set(jobId, new Set());
+    }
+    jobSockets.get(jobId)?.add(socket);
+
+    socket.on('message', (data) => {
+      try {
+        const payload = JSON.parse(data.toString());
+        if (payload?.type === 'typing') {
+          broadcastToJob(jobId, {
+            type: 'typing',
+            payload: {
+              userId,
+              isTyping: !!payload.payload?.isTyping,
+            },
+          });
+        }
+      } catch (err) {
+        console.error('WS message error', err);
+      }
+    });
+
+    socket.on('close', () => {
+      jobSockets.get(jobId)?.delete(socket);
+    });
+  } catch (err) {
+    console.error('WS connection error', err);
+    socket.close(1011, 'Server error');
+  }
+});
+
+ensureMessagingSchema().catch((err) => {
+  console.error('Failed to ensure messaging schema', err);
+});
+
+server.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
 });
