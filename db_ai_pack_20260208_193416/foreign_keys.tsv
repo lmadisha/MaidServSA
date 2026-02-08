@@ -4,6 +4,8 @@ public	experience_answers	user_id	public	users	id	experience_answers_user_id_fke
 public	job_history	job_id	public	jobs	id	job_history_job_id_fkey
 public	jobs	assigned_maid_id	public	users	id	jobs_assigned_maid_id_fkey
 public	jobs	client_id	public	users	id	jobs_client_id_fkey
+public	message_reads	message_id	public	messages	id	message_reads_message_id_fkey
+public	message_reads	user_id	public	users	id	message_reads_user_id_fkey
 public	messages	job_id	public	jobs	id	messages_job_id_fkey
 public	messages	receiver_id	public	users	id	messages_receiver_id_fkey
 public	messages	sender_id	public	users	id	messages_sender_id_fkey

@@ -2,7 +2,8 @@ public.applications: id uuid, job_id uuid, maid_id uuid, status USER-DEFINED, me
 public.experience_answers: id uuid, user_id uuid, question_id text, question text, answer text, created_at timestamp with time zone
 public.job_history: id uuid, job_id uuid, status USER-DEFINED, note text, timestamp timestamp with time zone
 public.jobs: id uuid, client_id uuid, title text, description text, location text, area_size integer, price numeric, currency text, date date, status USER-DEFINED, rooms smallint, bathrooms smallint, images ARRAY, payment_type USER-DEFINED, start_time time without time zone, end_time time without time zone, duration numeric, work_dates ARRAY, assigned_maid_id uuid, created_at timestamp with time zone, updated_at timestamp with time zone
-public.messages: id uuid, job_id uuid, sender_id uuid, receiver_id uuid, content text, timestamp timestamp with time zone
+public.message_reads: message_id uuid, user_id uuid, read_at timestamp with time zone
+public.messages: id uuid, job_id uuid, sender_id uuid, receiver_id uuid, content text, timestamp timestamp with time zone, attachments jsonb, edited_at timestamp with time zone, deleted_at timestamp with time zone, deleted_by uuid
 public.notifications: id uuid, user_id uuid, message text, type text, read boolean, timestamp timestamp with time zone
 public.reviews: id uuid, job_id uuid, reviewer_id uuid, reviewee_id uuid, rating smallint, comment text, created_at timestamp with time zone
 public.user_files: id uuid, owner_user_id uuid, original_name text, mime_type text, size_bytes bigint, storage_provider text, bucket text, object_key text, checksum_sha256 text, is_public boolean, status text, meta jsonb, created_at timestamp with time zone, updated_at timestamp with time zone

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict J0MsgKMmh6ELQ81anMcBKtBfKVuXBWjhPF8wWabihtERuRdiLsgUKdQYDocdqyQ
+\restrict Lr0bUPTP4g88foDokLU4v08eQJNvwQwxe9nevUhcpnHLfmRmecZBHhQvJG6dhpr
 
 -- Dumped from database version 18.1 (Debian 18.1-1.pgdg13+2)
 -- Dumped by pg_dump version 18.1
@@ -168,6 +168,17 @@ CREATE TABLE public.jobs (
 
 
 --
+-- Name: message_reads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_reads (
+    message_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    read_at timestamp with time zone DEFAULT now()
+);
+
+
+--
 -- Name: messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -177,7 +188,11 @@ CREATE TABLE public.messages (
     sender_id uuid,
     receiver_id uuid,
     content text NOT NULL,
-    "timestamp" timestamp with time zone DEFAULT now()
+    "timestamp" timestamp with time zone DEFAULT now(),
+    attachments jsonb DEFAULT '[]'::jsonb,
+    edited_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    deleted_by uuid
 );
 
 
@@ -308,6 +323,14 @@ ALTER TABLE ONLY public.jobs
 
 
 --
+-- Name: message_reads message_reads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_reads
+    ADD CONSTRAINT message_reads_pkey PRIMARY KEY (message_id, user_id);
+
+
+--
 -- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -383,6 +406,13 @@ CREATE INDEX idx_applications_job_id ON public.applications USING btree (job_id)
 --
 
 CREATE INDEX idx_jobs_status ON public.jobs USING btree (status);
+
+
+--
+-- Name: idx_message_reads_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_reads_user_id ON public.message_reads USING btree (user_id);
 
 
 --
@@ -499,6 +529,22 @@ ALTER TABLE ONLY public.jobs
 
 
 --
+-- Name: message_reads message_reads_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_reads
+    ADD CONSTRAINT message_reads_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_reads message_reads_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_reads
+    ADD CONSTRAINT message_reads_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: messages messages_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -558,5 +604,5 @@ ALTER TABLE ONLY public.reviews
 -- PostgreSQL database dump complete
 --
 
-\unrestrict J0MsgKMmh6ELQ81anMcBKtBfKVuXBWjhPF8wWabihtERuRdiLsgUKdQYDocdqyQ
+\unrestrict Lr0bUPTP4g88foDokLU4v08eQJNvwQwxe9nevUhcpnHLfmRmecZBHhQvJG6dhpr
 

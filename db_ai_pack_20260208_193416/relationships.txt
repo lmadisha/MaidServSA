@@ -4,6 +4,8 @@ public.experience_answers.user_id -> public.users.id
 public.job_history.job_id -> public.jobs.id
 public.jobs.assigned_maid_id -> public.users.id
 public.jobs.client_id -> public.users.id
+public.message_reads.message_id -> public.messages.id
+public.message_reads.user_id -> public.users.id
 public.messages.job_id -> public.jobs.id
 public.messages.receiver_id -> public.users.id
 public.messages.sender_id -> public.users.id
