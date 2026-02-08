@@ -292,6 +292,7 @@ const App: React.FC = () => {
                   user={currentUser}
                   jobs={jobs}
                   applications={applications}
+                  users={users}
                   onApply={handleApply}
                 />
               ) : (

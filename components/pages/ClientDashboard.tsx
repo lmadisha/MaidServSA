@@ -3,6 +3,7 @@ import { Application, ApplicationStatus, Job, JobStatus, User } from '../../type
 import { IconCalendar, IconClock, IconEdit, IconTrash } from '../Icons';
 import JobModal from './JobModal';
 import MaidProfileModal from './MaidProfileModal.tsx';
+import MessageModal from './MessageModal';
 
 const CalendarView: React.FC<{ jobs: Job[] }> = ({ jobs }) => {
   const sortedJobs = [...jobs].sort(
@@ -74,6 +75,10 @@ const ClientDashboard: React.FC<{
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<'jobs' | 'calendar'>('jobs');
+  const [messageContext, setMessageContext] = useState<{
+    job: Job;
+    otherUser: User;
+  } | null>(null);
 
   const myJobs = jobs.filter((j) => j.clientId === user.id);
 
@@ -180,6 +185,7 @@ const ClientDashboard: React.FC<{
                     <ul className="divide-y divide-gray-200">
                       {jobApps.map((app) => {
                         const maid = users.find((u) => u.id === app.maidId);
+                        const canMessage = app.status === ApplicationStatus.ACCEPTED && maid;
                         return (
                           <li key={app.id} className="py-3 flex justify-between items-center">
                             <div className="flex items-center">
@@ -237,6 +243,18 @@ const ClientDashboard: React.FC<{
                                   {app.status}
                                 </span>
                               )}
+                              {canMessage && (
+                                <button
+                                  onClick={() => {
+                                    if (maid) {
+                                      setMessageContext({ job, otherUser: maid });
+                                    }
+                                  }}
+                                  className="text-teal-600 hover:text-teal-800 text-xs font-medium border border-teal-200 px-2 py-1 rounded bg-teal-50"
+                                >
+                                  Message
+                                </button>
+                              )}
                             </div>
                           </li>
                         );
@@ -262,6 +280,14 @@ const ClientDashboard: React.FC<{
         }}
         job={editingJob}
         clientId={user.id}
+      />
+
+      <MessageModal
+        isOpen={!!messageContext}
+        onClose={() => setMessageContext(null)}
+        job={messageContext?.job ?? null}
+        currentUser={user}
+        otherUser={messageContext?.otherUser ?? null}
       />
     </div>
   );

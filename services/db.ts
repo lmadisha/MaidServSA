@@ -1,4 +1,4 @@
-import type { Application, Job, Notification, User } from '../types';
+import type { Application, Job, Message, Notification, User } from '../types';
 
 const API_BASE = '/api';
 
@@ -225,6 +225,16 @@ class DBService {
   async getSignedUrl(fileId: string): Promise<string> {
     const data = await api<{ url: string }>(`/files/signed-url/${fileId}`);
     return data.url;
+  }
+
+  // -------------- MESSAGES --------------
+  getMessages(jobId: string, userId: string): Promise<Message[]> {
+    const query = new URLSearchParams({ jobId, userId });
+    return api<Message[]>(`/messages?${query.toString()}`);
+  }
+
+  createMessage(message: Partial<Message>): Promise<Message> {
+    return api<Message>('/messages', { method: 'POST', body: JSON.stringify(message) });
   }
 }
 

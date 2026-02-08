@@ -169,6 +169,51 @@ function mapNotification(row: any) {
   };
 }
 
+function mapMessage(row: any) {
+  return {
+    id: row.id,
+    jobId: row.job_id,
+    senderId: row.sender_id,
+    receiverId: row.receiver_id,
+    content: row.content,
+    timestamp: row.timestamp?.toISOString?.() ?? null,
+  };
+}
+
+async function getMessagingParticipants(jobId: string) {
+  const jobQ = await pool.query(
+    `SELECT id, client_id, assigned_maid_id
+     FROM jobs
+     WHERE id = $1 LIMIT 1;`,
+    [jobId]
+  );
+
+  if (!jobQ.rowCount) {
+    return { error: 'NOT_FOUND' as const };
+  }
+
+  const { client_id: clientId, assigned_maid_id: maidId } = jobQ.rows[0];
+
+  if (!maidId) {
+    return { error: 'NOT_READY' as const };
+  }
+
+  const appQ = await pool.query(
+    `SELECT status
+     FROM applications
+     WHERE job_id = $1
+       AND maid_id = $2
+     LIMIT 1;`,
+    [jobId, maidId]
+  );
+
+  if (!appQ.rowCount || appQ.rows[0].status !== 'ACCEPTED') {
+    return { error: 'NOT_READY' as const };
+  }
+
+  return { clientId, maidId };
+}
+
 // --- health ---
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
@@ -1023,6 +1068,92 @@ app.delete(
       [id]
     );
     res.json({ ok: true });
+  })
+);
+
+// --- MESSAGES ---
+app.get(
+  '/api/messages',
+  asyncHandler(async (req, res) => {
+    const jobIdRaw = String(req.query.jobId ?? '');
+    const userIdRaw = String(req.query.userId ?? '');
+
+    if (!jobIdRaw || !userIdRaw) {
+      return res.status(400).json({ error: 'jobId and userId are required.' });
+    }
+
+    const jobId = toUuid(jobIdRaw);
+    const userId = toUuid(userIdRaw);
+
+    const participants = await getMessagingParticipants(jobId);
+    if ('error' in participants) {
+      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+      return res.status(status).json({
+        error:
+          participants.error === 'NOT_FOUND'
+            ? 'Job not found.'
+            : 'Messaging is only available after a maid is accepted.',
+      });
+    }
+
+    if (![participants.clientId, participants.maidId].includes(userId)) {
+      return res.status(403).json({ error: 'You do not have access to this conversation.' });
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT id, job_id, sender_id, receiver_id, content, timestamp
+        FROM messages
+        WHERE job_id = $1
+        ORDER BY timestamp ASC;
+      `,
+      [jobId]
+    );
+
+    res.json(rows.map(mapMessage));
+  })
+);
+
+app.post(
+  '/api/messages',
+  asyncHandler(async (req, res) => {
+    const m = req.body ?? {};
+    const jobId = toUuid(String(m.jobId ?? ''));
+    const senderId = toUuid(String(m.senderId ?? ''));
+    const receiverId = toUuid(String(m.receiverId ?? ''));
+    const content = String(m.content ?? '').trim();
+
+    if (!content) {
+      return res.status(400).json({ error: 'Message content is required.' });
+    }
+
+    const participants = await getMessagingParticipants(jobId);
+    if ('error' in participants) {
+      const status = participants.error === 'NOT_FOUND' ? 404 : 403;
+      return res.status(status).json({
+        error:
+          participants.error === 'NOT_FOUND'
+            ? 'Job not found.'
+            : 'Messaging is only available after a maid is accepted.',
+      });
+    }
+
+    const allowed = [participants.clientId, participants.maidId];
+    if (!allowed.includes(senderId) || !allowed.includes(receiverId) || senderId === receiverId) {
+      return res.status(403).json({ error: 'Invalid message participants.' });
+    }
+
+    const id = uuidv4();
+    const { rows } = await pool.query(
+      `
+        INSERT INTO messages (id, job_id, sender_id, receiver_id, content, timestamp)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        RETURNING id, job_id, sender_id, receiver_id, content, timestamp;
+      `,
+      [id, jobId, senderId, receiverId, content]
+    );
+
+    res.status(201).json(mapMessage(rows[0]));
   })
 );
 
