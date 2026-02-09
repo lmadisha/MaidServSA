@@ -4,17 +4,24 @@ import { IconMapPin } from '../Icons';
 import ApplyModal from './ApplyModal';
 import JobDetailsModal from './JobDetailsModal';
 import { INPUT_CLASS } from './formStyles';
+import MessageModal from './MessageModal';
 
 const MaidDashboard: React.FC<{
   user: User;
   jobs: Job[];
   applications: Application[];
+  users: User[];
   onApply: (jobId: string, message: string) => void;
-}> = ({ user, jobs, applications, onApply }) => {
+}> = ({ user, jobs, applications, users, onApply }) => {
   const [activeTab, setActiveTab] = useState<'find' | 'my'>('find');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [viewingJob, setViewingJob] = useState<Job | null>(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [filterLocation, setFilterLocation] = useState('');
+  const [messageContext, setMessageContext] = useState<{
+    job: Job;
+    otherUser: User;
+  } | null>(null);
 
   const myApplications = applications.filter((a) => a.maidId === user.id);
   const myJobIds = myApplications.map((a) => a.jobId);
@@ -124,6 +131,10 @@ const MaidDashboard: React.FC<{
           <ul className="divide-y divide-gray-200">
             {myJobsList.map((job) => {
               const app = applications.find((a) => a.jobId === job.id && a.maidId === user.id);
+              const client = users.find((u) => u.id === job.clientId);
+              const canMessage =
+                job.status === JobStatus.IN_PROGRESS &&
+                (app?.status === ApplicationStatus.ACCEPTED || job.assignedMaidId === user.id);
               return (
                 <li key={job.id} className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
@@ -146,6 +157,22 @@ const MaidDashboard: React.FC<{
                       </span>
                     </div>
                   </div>
+                  {canMessage && client && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setViewingJob(job)}
+                        className="text-gray-600 hover:text-gray-800 text-xs font-medium border border-gray-200 px-2 py-1 rounded bg-white"
+                      >
+                        View Job
+                      </button>
+                      <button
+                        onClick={() => setMessageContext({ job, otherUser: client })}
+                        className="text-teal-600 hover:text-teal-800 text-xs font-medium border border-teal-200 px-2 py-1 rounded bg-teal-50"
+                      >
+                        Message Client
+                      </button>
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -163,11 +190,24 @@ const MaidDashboard: React.FC<{
         onClose={() => setSelectedJob(null)}
         onApply={handleApplyClick}
       />
+      <JobDetailsModal
+        job={viewingJob}
+        onClose={() => setViewingJob(null)}
+        showApply={false}
+      />
       <ApplyModal
         isOpen={showApplyModal}
         onClose={() => setShowApplyModal(false)}
         onSubmit={submitApplication}
         jobTitle={selectedJob?.title || ''}
+      />
+
+      <MessageModal
+        isOpen={!!messageContext}
+        onClose={() => setMessageContext(null)}
+        job={messageContext?.job ?? null}
+        currentUser={user}
+        otherUser={messageContext?.otherUser ?? null}
       />
     </div>
   );

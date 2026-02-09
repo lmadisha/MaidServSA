@@ -1,4 +1,4 @@
-import type { Application, Job, Notification, User } from '../types';
+import type { Application, Job, Message, Notification, User } from '../types';
 
 const API_BASE = '/api';
 
@@ -122,6 +122,13 @@ class DBService {
     return api<void>(`/jobs/${jobId}`, { method: 'DELETE' });
   }
 
+  completeJob(jobId: string, clientId: string): Promise<Job> {
+    return api<Job>(`/jobs/${jobId}/complete`, {
+      method: 'PATCH',
+      body: JSON.stringify({ clientId }),
+    });
+  }
+
   // -------------- APPLICATIONS --------------
   // Add this specific method for the Accept/Reject flow
   async updateApplicationStatus(appId: string, status: string): Promise<any> {
@@ -206,7 +213,7 @@ class DBService {
   async uploadFile(
     file: File,
     userId: string,
-    folder: 'avatars' | 'cvs'
+    folder: 'avatars' | 'cvs' | 'messages'
   ): Promise<{ id: string; url: string }> {
     const formData = new FormData();
     formData.append('file', file);
@@ -225,6 +232,44 @@ class DBService {
   async getSignedUrl(fileId: string): Promise<string> {
     const data = await api<{ url: string }>(`/files/signed-url/${fileId}`);
     return data.url;
+  }
+
+  // -------------- MESSAGES --------------
+  getMessages(jobId: string, userId: string): Promise<Message[]> {
+    const query = new URLSearchParams({ jobId, userId });
+    return api<Message[]>(`/messages?${query.toString()}`);
+  }
+
+  createMessage(message: Partial<Message>): Promise<Message> {
+    return api<Message>('/messages', { method: 'POST', body: JSON.stringify(message) });
+  }
+
+  updateMessage(messageId: string, content: string, senderId: string): Promise<Message> {
+    return api<Message>(`/messages/${messageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content, senderId }),
+    });
+  }
+
+  deleteMessage(messageId: string, senderId: string): Promise<Message> {
+    return api<Message>(`/messages/${messageId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ senderId }),
+    });
+  }
+
+  markMessagesRead(jobId: string, userId: string): Promise<{ messageIds: string[]; readAt: string }> {
+    return api<{ messageIds: string[]; readAt: string }>(`/messages/read`, {
+      method: 'POST',
+      body: JSON.stringify({ jobId, userId }),
+    });
+  }
+
+  reportMessage(messageId: string, reporterId: string, reason: string): Promise<void> {
+    return api<void>(`/messages/${messageId}/report`, {
+      method: 'POST',
+      body: JSON.stringify({ reporterId, reason }),
+    });
   }
 }
 

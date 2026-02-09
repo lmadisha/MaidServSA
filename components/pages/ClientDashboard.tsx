@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Application, ApplicationStatus, Job, JobStatus, User } from '../../types';
 import { IconCalendar, IconClock, IconEdit, IconTrash } from '../Icons';
 import JobModal from './JobModal';
+import JobDetailsModal from './JobDetailsModal';
 import MaidProfileModal from './MaidProfileModal.tsx';
+import MessageModal from './MessageModal';
 
 const CalendarView: React.FC<{ jobs: Job[] }> = ({ jobs }) => {
   const sortedJobs = [...jobs].sort(
@@ -60,6 +62,7 @@ const ClientDashboard: React.FC<{
   onPostJob: (job: Job) => void;
   onUpdateJob: (job: Job) => void;
   onDeleteJob: (jobId: string) => void;
+  onCompleteJob: (jobId: string) => void;
   onUpdateApplicationStatus: (appId: string, status: ApplicationStatus) => void;
 }> = ({
   user,
@@ -69,11 +72,17 @@ const ClientDashboard: React.FC<{
   onPostJob,
   onUpdateJob,
   onDeleteJob,
+  onCompleteJob,
   onUpdateApplicationStatus,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<'jobs' | 'calendar'>('jobs');
+  const [messageContext, setMessageContext] = useState<{
+    job: Job;
+    otherUser: User;
+  } | null>(null);
+  const [viewingJob, setViewingJob] = useState<Job | null>(null);
 
   const myJobs = jobs.filter((j) => j.clientId === user.id);
 
@@ -142,7 +151,7 @@ const ClientDashboard: React.FC<{
                       {job.location} • {new Date(job.date).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {/* ONLY show the edit button if the job is still OPEN */}
                     {job.status === JobStatus.OPEN ? (
                       <button
@@ -168,6 +177,22 @@ const ClientDashboard: React.FC<{
                     >
                       <IconTrash className="w-5 h-5" />
                     </button>
+                    {job.status !== JobStatus.OPEN && (
+                      <button
+                        onClick={() => setViewingJob(job)}
+                        className="text-gray-600 hover:text-gray-800 text-xs font-medium border border-gray-200 px-2 py-1 rounded bg-white"
+                      >
+                        View Details
+                      </button>
+                    )}
+                    {job.status === JobStatus.IN_PROGRESS && (
+                      <button
+                        onClick={() => onCompleteJob(job.id)}
+                        className="text-teal-600 hover:text-teal-800 text-xs font-medium border border-teal-200 px-2 py-1 rounded bg-teal-50"
+                      >
+                        Mark Complete
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="px-4 py-4 sm:px-6">
@@ -180,6 +205,10 @@ const ClientDashboard: React.FC<{
                     <ul className="divide-y divide-gray-200">
                       {jobApps.map((app) => {
                         const maid = users.find((u) => u.id === app.maidId);
+                        const canMessage =
+                          app.status === ApplicationStatus.ACCEPTED &&
+                          job.status === JobStatus.IN_PROGRESS &&
+                          maid;
                         return (
                           <li key={app.id} className="py-3 flex justify-between items-center">
                             <div className="flex items-center">
@@ -237,6 +266,18 @@ const ClientDashboard: React.FC<{
                                   {app.status}
                                 </span>
                               )}
+                              {canMessage && (
+                                <button
+                                  onClick={() => {
+                                    if (maid) {
+                                      setMessageContext({ job, otherUser: maid });
+                                    }
+                                  }}
+                                  className="text-teal-600 hover:text-teal-800 text-xs font-medium border border-teal-200 px-2 py-1 rounded bg-teal-50"
+                                >
+                                  Message
+                                </button>
+                              )}
                             </div>
                           </li>
                         );
@@ -262,6 +303,20 @@ const ClientDashboard: React.FC<{
         }}
         job={editingJob}
         clientId={user.id}
+      />
+
+      <MessageModal
+        isOpen={!!messageContext}
+        onClose={() => setMessageContext(null)}
+        job={messageContext?.job ?? null}
+        currentUser={user}
+        otherUser={messageContext?.otherUser ?? null}
+      />
+
+      <JobDetailsModal
+        job={viewingJob}
+        onClose={() => setViewingJob(null)}
+        showApply={false}
       />
     </div>
   );

@@ -5,8 +5,9 @@ import { IconClock, IconMapPin, IconXCircle } from '../Icons';
 const JobDetailsModal: React.FC<{
   job: Job | null;
   onClose: () => void;
-  onApply: (job: Job) => void;
-}> = ({ job, onClose, onApply }) => {
+  onApply?: (job: Job) => void;
+  showApply?: boolean;
+}> = ({ job, onClose, onApply, showApply = true }) => {
   if (!job) return null;
 
   return (
@@ -88,13 +89,15 @@ const JobDetailsModal: React.FC<{
             </div>
           </div>
           <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button
-              type="button"
-              onClick={() => onApply(job)}
-              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:ml-3 sm:w-auto sm:text-sm"
-            >
-              Apply Now
-            </button>
+            {showApply && (
+              <button
+                type="button"
+                onClick={() => onApply?.(job)}
+                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:ml-3 sm:w-auto sm:text-sm"
+              >
+                Apply Now
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
