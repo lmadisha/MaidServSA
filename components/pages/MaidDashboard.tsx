@@ -15,6 +15,7 @@ const MaidDashboard: React.FC<{
 }> = ({ user, jobs, applications, users, onApply }) => {
   const [activeTab, setActiveTab] = useState<'find' | 'my'>('find');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [viewingJob, setViewingJob] = useState<Job | null>(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [filterLocation, setFilterLocation] = useState('');
   const [messageContext, setMessageContext] = useState<{
@@ -157,7 +158,13 @@ const MaidDashboard: React.FC<{
                     </div>
                   </div>
                   {canMessage && client && (
-                    <div className="mt-3">
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setViewingJob(job)}
+                        className="text-gray-600 hover:text-gray-800 text-xs font-medium border border-gray-200 px-2 py-1 rounded bg-white"
+                      >
+                        View Job
+                      </button>
                       <button
                         onClick={() => setMessageContext({ job, otherUser: client })}
                         className="text-teal-600 hover:text-teal-800 text-xs font-medium border border-teal-200 px-2 py-1 rounded bg-teal-50"
@@ -182,6 +189,11 @@ const MaidDashboard: React.FC<{
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
         onApply={handleApplyClick}
+      />
+      <JobDetailsModal
+        job={viewingJob}
+        onClose={() => setViewingJob(null)}
+        showApply={false}
       />
       <ApplyModal
         isOpen={showApplyModal}

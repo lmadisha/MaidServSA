@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Application, ApplicationStatus, Job, JobStatus, User } from '../../types';
 import { IconCalendar, IconClock, IconEdit, IconTrash } from '../Icons';
 import JobModal from './JobModal';
+import JobDetailsModal from './JobDetailsModal';
 import MaidProfileModal from './MaidProfileModal.tsx';
 import MessageModal from './MessageModal';
 
@@ -81,6 +82,7 @@ const ClientDashboard: React.FC<{
     job: Job;
     otherUser: User;
   } | null>(null);
+  const [viewingJob, setViewingJob] = useState<Job | null>(null);
 
   const myJobs = jobs.filter((j) => j.clientId === user.id);
 
@@ -149,7 +151,7 @@ const ClientDashboard: React.FC<{
                       {job.location} • {new Date(job.date).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {/* ONLY show the edit button if the job is still OPEN */}
                     {job.status === JobStatus.OPEN ? (
                       <button
@@ -175,6 +177,14 @@ const ClientDashboard: React.FC<{
                     >
                       <IconTrash className="w-5 h-5" />
                     </button>
+                    {job.status !== JobStatus.OPEN && (
+                      <button
+                        onClick={() => setViewingJob(job)}
+                        className="text-gray-600 hover:text-gray-800 text-xs font-medium border border-gray-200 px-2 py-1 rounded bg-white"
+                      >
+                        View Details
+                      </button>
+                    )}
                     {job.status === JobStatus.IN_PROGRESS && (
                       <button
                         onClick={() => onCompleteJob(job.id)}
@@ -301,6 +311,12 @@ const ClientDashboard: React.FC<{
         job={messageContext?.job ?? null}
         currentUser={user}
         otherUser={messageContext?.otherUser ?? null}
+      />
+
+      <JobDetailsModal
+        job={viewingJob}
+        onClose={() => setViewingJob(null)}
+        showApply={false}
       />
     </div>
   );
