@@ -370,6 +370,14 @@ async function ensureMessagingSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reports_status ON message_reports(status);`);
 }
 
+async function ensureJobsSchema() {
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS public_area TEXT;`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS full_address TEXT;`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS place_id TEXT;`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,6);`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,6);`);
+}
+
 function normalizeAttachments(input: any): any[] {
   if (!Array.isArray(input)) return [];
   return input
@@ -2034,8 +2042,8 @@ wss.on('connection', async (socket, req) => {
   }
 });
 
-ensureMessagingSchema().catch((err) => {
-  console.error('Failed to ensure messaging schema', err);
+Promise.all([ensureMessagingSchema(), ensureJobsSchema()]).catch((err) => {
+  console.error('Failed to ensure DB schema', err);
 });
 
 server.listen(PORT, () => {
