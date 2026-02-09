@@ -122,6 +122,51 @@ const JOB_SELECT = `
   duration, work_dates, created_at, updated_at
 `;
 
+async function autoCompleteOverdueJobs(jobId?: string): Promise<void> {
+  await withTx(async (client) => {
+    const params: any[] = [];
+    const where: string[] = ["status = 'IN_PROGRESS'"];
+    if (jobId) {
+      params.push(jobId);
+      where.push(`id = $${params.length}`);
+    }
+
+    const { rows } = await client.query(
+      `
+        SELECT id
+        FROM jobs
+        WHERE ${where.join(' AND ')}
+          AND COALESCE((SELECT MAX(d) FROM unnest(work_dates) AS d), date) < CURRENT_DATE
+        FOR UPDATE;
+      `,
+      params
+    );
+
+    for (const row of rows) {
+      const updated = await client.query(
+        `
+          UPDATE jobs
+          SET status = 'COMPLETED',
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING ${JOB_SELECT};
+        `,
+        [row.id]
+      );
+
+      if (updated.rowCount) {
+        await client.query(
+          `
+            INSERT INTO job_history (job_id, status, note, timestamp)
+            VALUES ($1, $2, $3, NOW());
+          `,
+          [row.id, updated.rows[0].status, 'Auto-completed after scheduled end date']
+        );
+      }
+    }
+  });
+}
+
 function mapJob(row: any) {
   return {
     id: row.id,
@@ -709,6 +754,7 @@ app.put(
 app.get(
   '/api/jobs',
   asyncHandler(async (_req, res) => {
+    await autoCompleteOverdueJobs();
     const { rows } = await pool.query(`SELECT ${JOB_SELECT}
                                        FROM jobs
                                        ORDER BY created_at DESC;`);
@@ -720,6 +766,7 @@ app.get(
   '/api/jobs/:id',
   asyncHandler(async (req, res) => {
     const id = toUuid(req.params.id);
+    await autoCompleteOverdueJobs(id);
     const { rows } = await pool.query(
       `SELECT ${JOB_SELECT}
                                        FROM jobs
@@ -911,6 +958,72 @@ app.put(
         error: 'Forbidden',
         message: 'This job is already in progress and cannot be edited.',
       });
+    }
+
+    res.json(result.job);
+  })
+);
+
+app.patch(
+  '/api/jobs/:id/complete',
+  asyncHandler(async (req, res) => {
+    const jobId = toUuid(req.params.id);
+    const clientIdRaw = String(req.body?.clientId ?? '');
+    if (!clientIdRaw) return res.status(400).json({ error: 'clientId is required.' });
+    const clientId = toUuid(clientIdRaw);
+
+    const result = await withTx(async (client) => {
+      const jobQ = await client.query(
+        `SELECT client_id, status
+         FROM jobs
+         WHERE id = $1 FOR UPDATE;`,
+        [jobId]
+      );
+      if (!jobQ.rowCount) return null;
+
+      if (jobQ.rows[0].client_id !== clientId) {
+        return { error: 'FORBIDDEN' as const };
+      }
+
+      const status = jobQ.rows[0].status;
+      if (status === 'COMPLETED') {
+        const { rows } = await client.query(`SELECT ${JOB_SELECT} FROM jobs WHERE id = $1`, [
+          jobId,
+        ]);
+        return { job: mapJob(rows[0]) };
+      }
+      if (status !== 'IN_PROGRESS') {
+        return { error: 'INVALID_STATUS' as const };
+      }
+
+      const { rows } = await client.query(
+        `
+          UPDATE jobs
+          SET status = 'COMPLETED',
+              updated_at = NOW()
+          WHERE id = $1
+          RETURNING ${JOB_SELECT};
+        `,
+        [jobId]
+      );
+
+      await client.query(
+        `
+          INSERT INTO job_history (job_id, status, note, timestamp)
+          VALUES ($1, $2, $3, NOW());
+        `,
+        [jobId, rows[0].status, 'Client marked job as completed']
+      );
+
+      return { job: mapJob(rows[0]) };
+    });
+
+    if (!result) return res.status(404).json({ error: 'Job not found' });
+    if (result.error === 'FORBIDDEN') {
+      return res.status(403).json({ error: 'Only the client can complete this job.' });
+    }
+    if (result.error === 'INVALID_STATUS') {
+      return res.status(400).json({ error: 'Job is not in progress.' });
     }
 
     res.json(result.job);

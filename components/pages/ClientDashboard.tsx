@@ -61,6 +61,7 @@ const ClientDashboard: React.FC<{
   onPostJob: (job: Job) => void;
   onUpdateJob: (job: Job) => void;
   onDeleteJob: (jobId: string) => void;
+  onCompleteJob: (jobId: string) => void;
   onUpdateApplicationStatus: (appId: string, status: ApplicationStatus) => void;
 }> = ({
   user,
@@ -70,6 +71,7 @@ const ClientDashboard: React.FC<{
   onPostJob,
   onUpdateJob,
   onDeleteJob,
+  onCompleteJob,
   onUpdateApplicationStatus,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -173,6 +175,14 @@ const ClientDashboard: React.FC<{
                     >
                       <IconTrash className="w-5 h-5" />
                     </button>
+                    {job.status === JobStatus.IN_PROGRESS && (
+                      <button
+                        onClick={() => onCompleteJob(job.id)}
+                        className="text-teal-600 hover:text-teal-800 text-xs font-medium border border-teal-200 px-2 py-1 rounded bg-teal-50"
+                      >
+                        Mark Complete
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="px-4 py-4 sm:px-6">

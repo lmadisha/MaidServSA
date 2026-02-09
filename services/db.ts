@@ -122,6 +122,13 @@ class DBService {
     return api<void>(`/jobs/${jobId}`, { method: 'DELETE' });
   }
 
+  completeJob(jobId: string, clientId: string): Promise<Job> {
+    return api<Job>(`/jobs/${jobId}/complete`, {
+      method: 'PATCH',
+      body: JSON.stringify({ clientId }),
+    });
+  }
+
   // -------------- APPLICATIONS --------------
   // Add this specific method for the Accept/Reject flow
   async updateApplicationStatus(appId: string, status: string): Promise<any> {

@@ -140,6 +140,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCompleteJob = async (jobId: string) => {
+    if (!currentUser) return;
+    try {
+      const saved = await db.completeJob(jobId, currentUser.id);
+      setJobs((prev) => prev.map((j) => (j.id === saved.id ? saved : j)));
+    } catch (error: any) {
+      alert(error.message || 'Failed to complete job.');
+    }
+  };
+
   const handleDeleteJob = async (jobId: string) => {
     await db.deleteJob(jobId);
     setJobs((prev) => prev.filter((j) => j.id !== jobId));
@@ -276,6 +286,7 @@ const App: React.FC = () => {
                   onPostJob={handlePostJob}
                   onUpdateJob={handleUpdateJob}
                   onDeleteJob={handleDeleteJob}
+                  onCompleteJob={handleCompleteJob}
                   onUpdateApplicationStatus={handleUpdateApplicationStatus}
                 />
               ) : (
