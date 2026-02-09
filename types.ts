@@ -93,6 +93,11 @@ export interface Job {
   title: string;
   description: string;
   location: string;
+  publicArea?: string;
+  fullAddress?: string;
+  placeId?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   areaSize: number; // in square meters
   price: number;
   currency: string;

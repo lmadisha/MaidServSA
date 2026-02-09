@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Job, JobStatus, PaymentType } from '../../types';
 import { generateJobDescription } from '../../services/geminiService';
+import { loadGoogleMaps } from '../../services/googleMaps';
 import { LocationAutocomplete } from '../LocationAutocomplete';
 import { IconSparkles } from '../Icons';
 import FullCalendarSelector from './FullCalendarSelector';
@@ -18,6 +19,11 @@ const JobModal: React.FC<{
     title: '',
     description: '',
     location: '',
+    publicArea: '',
+    fullAddress: '',
+    placeId: undefined,
+    latitude: null,
+    longitude: null,
     areaSize: undefined,
     price: undefined,
     rooms: 1,
@@ -29,15 +35,25 @@ const JobModal: React.FC<{
     currency: 'R',
   });
   const [loadingAI, setLoadingAI] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (job) {
-      setFormData(job);
+      setFormData({
+        ...job,
+        publicArea: job.publicArea || job.location || '',
+        fullAddress: job.fullAddress || '',
+      });
     } else {
       setFormData({
         title: '',
         description: '',
         location: '',
+        publicArea: '',
+        fullAddress: '',
+        placeId: undefined,
+        latitude: null,
+        longitude: null,
         areaSize: undefined,
         price: undefined,
         rooms: 1,
@@ -51,9 +67,68 @@ const JobModal: React.FC<{
     }
   }, [job, isOpen]);
 
+  const derivePublicArea = (components: google.maps.GeocoderAddressComponent[] | undefined) => {
+    if (!components) return '';
+    const preferredTypes = [
+      'sublocality_level_1',
+      'sublocality',
+      'locality',
+      'administrative_area_level_2',
+      'administrative_area_level_1',
+    ];
+    for (const type of preferredTypes) {
+      const match = components.find((component) => component.types.includes(type));
+      if (match?.long_name) return match.long_name;
+    }
+    return '';
+  };
+
+  const fetchPlaceDetails = async (placeId: string) => {
+    try {
+      const google = await loadGoogleMaps();
+      if (!google.maps?.places) return null;
+      const service = new google.maps.places.PlacesService(document.createElement('div'));
+      return await new Promise<google.maps.places.PlaceResult | null>((resolve) => {
+        service.getDetails(
+          {
+            placeId,
+            fields: ['geometry', 'address_components', 'formatted_address'],
+          },
+          (place, status) => {
+            if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
+              resolve(null);
+              return;
+            }
+            resolve(place);
+          }
+        );
+      });
+    } catch (error) {
+      console.warn('Unable to load place details', error);
+      return null;
+    }
+  };
+
+  const handleFormKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.defaultPrevented || event.key !== 'Enter' || event.shiftKey) return;
+    const target = event.target as HTMLElement | null;
+    if (!target || target.tagName === 'TEXTAREA') return;
+    const form = formRef.current;
+    if (!form) return;
+
+    event.preventDefault();
+    const focusables = Array.from(
+      form.querySelectorAll<HTMLElement>('input, select, textarea, button')
+    ).filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1);
+    const index = focusables.indexOf(target);
+    if (index >= 0 && index < focusables.length - 1) {
+      focusables[index + 1].focus();
+    }
+  };
+
   const handleGenerateDesc = async () => {
-    if (!formData.location || !formData.areaSize) {
-      alert('Please fill in location and size first.');
+    if (!formData.publicArea || !formData.areaSize) {
+      alert('Please fill in the public area and size first.');
       return;
     }
     setLoadingAI(true);
@@ -61,7 +136,7 @@ const JobModal: React.FC<{
       formData.rooms || 0,
       formData.bathrooms || 0,
       formData.areaSize || 0,
-      formData.location || '',
+      formData.publicArea || '',
       formData.title || 'General Cleaning'
     );
     setFormData((prev) => ({ ...prev, description: desc }));
@@ -72,6 +147,11 @@ const JobModal: React.FC<{
     e.preventDefault();
 
     // Basic validation to ensure required numbers are present
+    if (!formData.fullAddress || !formData.publicArea) {
+      alert('Please enter both the full address and the public area.');
+      return;
+    }
+
     if (formData.price === undefined || formData.areaSize === undefined) {
       alert('Please enter a price and area size.');
       return;
@@ -85,7 +165,12 @@ const JobModal: React.FC<{
       clientId,
       title: formData.title!,
       description: formData.description!,
-      location: formData.location!,
+      location: formData.publicArea!,
+      publicArea: formData.publicArea!,
+      fullAddress: formData.fullAddress!,
+      placeId: formData.placeId,
+      latitude: formData.latitude ?? null,
+      longitude: formData.longitude ?? null,
       areaSize: formData.areaSize!,
       price: formData.price!,
       currency: formData.currency!,
@@ -114,7 +199,12 @@ const JobModal: React.FC<{
           <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
         </div>
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-          <form onSubmit={handleSubmit} className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <form
+            ref={formRef}
+            onSubmit={handleSubmit}
+            onKeyDown={handleFormKeyDown}
+            className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4"
+          >
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {job ? 'Edit Job' : 'Post New Job'}
             </h3>
@@ -130,12 +220,36 @@ const JobModal: React.FC<{
                   placeholder="e.g., Weekly Home Cleaning"
                 />
               </div>
-              <div>
-                <label className={LABEL_CLASS}>Location</label>
+              <div className="md:col-span-2">
+                <label className={LABEL_CLASS}>Full Address (private)</label>
                 <LocationAutocomplete
-                  value={formData.location || ''}
-                  onChange={(val) => setFormData({ ...formData, location: val })}
+                  value={formData.fullAddress || ''}
+                  onChange={(val) => setFormData({ ...formData, fullAddress: val })}
+                  onPlaceSelect={async (place) => {
+                    if (!place.placeId) return;
+                    const details = await fetchPlaceDetails(place.placeId);
+                    const nextPublicArea = derivePublicArea(details?.address_components);
+                    setFormData((prev) => ({
+                      ...prev,
+                      fullAddress: place.description,
+                      placeId: place.placeId ?? prev.placeId,
+                      latitude: details?.geometry?.location?.lat?.() ?? prev.latitude ?? null,
+                      longitude: details?.geometry?.location?.lng?.() ?? prev.longitude ?? null,
+                      publicArea: prev.publicArea || nextPublicArea || '',
+                    }));
+                  }}
                   className={INPUT_CLASS}
+                  placeholder="Street address, unit, complex, etc."
+                  required
+                />
+              </div>
+              <div>
+                <label className={LABEL_CLASS}>Public Area (shown to maids)</label>
+                <LocationAutocomplete
+                  value={formData.publicArea || ''}
+                  onChange={(val) => setFormData({ ...formData, publicArea: val })}
+                  className={INPUT_CLASS}
+                  placeholder="Suburb or area"
                   required
                 />
               </div>

@@ -28,7 +28,7 @@ const App: React.FC = () => {
     setNotifications,
     loading,
     setLoading,
-  } = useAppData();
+  } = useAppData(currentUser);
 
   const { handleLogin, handleSignUp, handleLogout, handleUpdateProfile } = useAuthActions({
     users,

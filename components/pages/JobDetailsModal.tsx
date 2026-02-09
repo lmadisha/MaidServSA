@@ -26,6 +26,70 @@ const JobDetailsModal: React.FC<{
             </div>
 
             <div className="space-y-4">
+              {(() => {
+                const locationLabel = job.fullAddress || job.publicArea || job.location;
+                const hasCoordinates =
+                  job.latitude !== null &&
+                  job.latitude !== undefined &&
+                  job.longitude !== null &&
+                  job.longitude !== undefined;
+                const hasPrivateAddress = Boolean(job.fullAddress);
+                const mapSrc = hasCoordinates
+                  ? `https://www.google.com/maps?q=${job.latitude},${job.longitude}&z=15&output=embed`
+                  : job.fullAddress
+                    ? `https://www.google.com/maps?q=${encodeURIComponent(
+                        job.fullAddress
+                      )}&output=embed`
+                    : null;
+                const destination = job.placeId
+                  ? `place_id:${job.placeId}`
+                  : hasCoordinates
+                    ? `${job.latitude},${job.longitude}`
+                    : job.fullAddress
+                      ? job.fullAddress
+                      : locationLabel;
+                const directionsUrl = destination
+                  ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                      destination
+                    )}`
+                  : null;
+
+                return (
+                  <>
+                    <div className="flex flex-col sm:flex-row gap-4 text-sm text-gray-600 border-b border-gray-100 pb-4">
+                      <div className="flex items-center">
+                        <IconMapPin className="w-4 h-4 mr-2 text-gray-400" /> {locationLabel}
+                      </div>
+                      <div className="flex items-center">
+                        <IconClock className="w-4 h-4 mr-2 text-gray-400" /> {job.startTime} -{' '}
+                        {job.endTime}
+                      </div>
+                    </div>
+
+                    {hasPrivateAddress && mapSrc && directionsUrl && (
+                      <div className="space-y-3">
+                        <div className="overflow-hidden rounded-lg border border-gray-200">
+                          <iframe
+                            title="Job location map"
+                            src={mapSrc}
+                            className="w-full h-56"
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          />
+                        </div>
+                        <a
+                          href={directionsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center text-sm font-medium text-teal-600 hover:text-teal-700"
+                        >
+                          Open in Maps
+                        </a>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-lg">
                 <div>
                   <p className="text-xs text-gray-500">Price</p>
@@ -49,16 +113,6 @@ const JobDetailsModal: React.FC<{
                 <div>
                   <p className="text-xs text-gray-500">Duration</p>
                   <p className="font-semibold">{job.duration || 8} Hours</p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4 text-sm text-gray-600 border-b border-gray-100 pb-4">
-                <div className="flex items-center">
-                  <IconMapPin className="w-4 h-4 mr-2 text-gray-400" /> {job.location}
-                </div>
-                <div className="flex items-center">
-                  <IconClock className="w-4 h-4 mr-2 text-gray-400" /> {job.startTime} -{' '}
-                  {job.endTime}
                 </div>
               </div>
 

@@ -17,7 +17,7 @@ const MaidDashboard: React.FC<{
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [viewingJob, setViewingJob] = useState<Job | null>(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
-  const [filterLocation, setFilterLocation] = useState('');
+  const [filterArea, setFilterArea] = useState('');
   const [messageContext, setMessageContext] = useState<{
     job: Job;
     otherUser: User;
@@ -30,7 +30,8 @@ const MaidDashboard: React.FC<{
     (j) =>
       j.status === JobStatus.OPEN &&
       !myJobIds.includes(j.id) &&
-      (filterLocation === '' || j.location.toLowerCase().includes(filterLocation.toLowerCase()))
+      (filterArea === '' ||
+        (j.publicArea || j.location).toLowerCase().includes(filterArea.toLowerCase()))
   );
 
   const myJobsList = jobs.filter((j) => myJobIds.includes(j.id) || j.assignedMaidId === user.id);
@@ -85,10 +86,10 @@ const MaidDashboard: React.FC<{
           <div className="flex gap-4 mb-4">
             <input
               type="text"
-              placeholder="Filter by location..."
+              placeholder="Filter by area..."
               className={INPUT_CLASS}
-              value={filterLocation}
-              onChange={(e) => setFilterLocation(e.target.value)}
+              value={filterArea}
+              onChange={(e) => setFilterArea(e.target.value)}
             />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -103,7 +104,7 @@ const MaidDashboard: React.FC<{
                     <span className="text-sm font-semibold text-teal-600">R{job.price}</span>
                   </div>
                   <p className="mt-1 text-sm text-gray-500 flex items-center">
-                    <IconMapPin className="w-4 h-4 mr-1" /> {job.location}
+                    <IconMapPin className="w-4 h-4 mr-1" /> {job.publicArea || job.location}
                   </p>
                   <p className="mt-2 text-sm text-gray-600 line-clamp-2">{job.description}</p>
                   <div className="mt-4">
@@ -140,7 +141,9 @@ const MaidDashboard: React.FC<{
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col">
                       <p className="text-sm font-medium text-teal-600 truncate">{job.title}</p>
-                      <p className="text-sm text-gray-500">{job.location}</p>
+                      <p className="text-sm text-gray-500">
+                        {job.fullAddress || job.publicArea || job.location}
+                      </p>
                     </div>
                     <div className="flex items-center">
                       <span

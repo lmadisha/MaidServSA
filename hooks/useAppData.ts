@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Application, Job, Notification, User } from '../types';
 import { db } from '../services/db';
 
-export const useAppData = () => {
+export const useAppData = (viewer?: User | null) => {
   const [users, setUsers] = useState<User[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -11,10 +11,13 @@ export const useAppData = () => {
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
       try {
         const [u, j, a, n] = await Promise.all([
           db.getUsers(),
-          db.getJobs(),
+          db.getJobs(
+            viewer?.id && viewer.role ? { viewerId: viewer.id, viewerRole: viewer.role } : undefined
+          ),
           db.getApplications(),
           db.getNotifications(),
         ]);
@@ -31,7 +34,7 @@ export const useAppData = () => {
     };
 
     loadData();
-  }, []);
+  }, [viewer?.id, viewer?.role]);
 
   return {
     users,
