@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { Application, ApplicationStatus, Job, Notification, User, UserRole } from './types';
-import { db } from './services/db';
+import { UserRole } from './types';
 import AuthPage from './components/pages/AuthPage';
 import ClientDashboard from './components/pages/ClientDashboard';
 import HelpPage from './components/pages/HelpPage';
@@ -9,224 +8,52 @@ import LandingPage from './components/pages/LandingPage';
 import MaidDashboard from './components/pages/MaidDashboard';
 import Navbar from './components/pages/Navbar';
 import ProfilePage from './components/pages/ProfilePage';
+import { useAppData } from './hooks/useAppData';
+import { useApplicationActions } from './hooks/useApplicationActions';
+import { useAuthActions } from './hooks/useAuthActions';
+import { useJobActions } from './hooks/useJobActions';
+import { useNotificationActions } from './hooks/useNotificationActions';
+import { useUserSession } from './hooks/useUserSession';
 
 const App: React.FC = () => {
-  // 1. IDENTITY: Persist this so we don't log out on refresh
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('maidserv_user');
-    return saved ? JSON.parse(saved) : null;
+  const { currentUser, setCurrentUser } = useUserSession();
+  const {
+    users,
+    setUsers,
+    jobs,
+    setJobs,
+    applications,
+    setApplications,
+    notifications,
+    setNotifications,
+    loading,
+    setLoading,
+  } = useAppData();
+
+  const { handleLogin, handleSignUp, handleLogout, handleUpdateProfile } = useAuthActions({
+    users,
+    setUsers,
+    setCurrentUser,
+    setLoading,
   });
 
-  // 2. CONTENT: Keep these as empty arrays, they load from the DB
-  const [users, setUsers] = useState<User[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { handlePostJob, handleUpdateJob, handleCompleteJob, handleDeleteJob } = useJobActions({
+    currentUser,
+    setJobs,
+  });
 
-  // 3. PERSISTENCE EFFECT: Save identity when it changes
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('maidserv_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('maidserv_user');
-    }
-  }, [currentUser]);
+  const { handleApply, handleUpdateApplicationStatus } = useApplicationActions({
+    currentUser,
+    jobs,
+    setApplications,
+    setJobs,
+    setNotifications,
+  });
 
-  // 4. DATA LOADING: Always fetch fresh content from the DB on mount
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Use Promise.all to load everything at once (faster)
-        const [u, j, a, n] = await Promise.all([
-          db.getUsers(),
-          db.getJobs(),
-          db.getApplications(),
-          db.getNotifications(),
-        ]);
-
-        setUsers(u);
-        setJobs(j);
-        setApplications(a);
-        setNotifications(n);
-      } catch (err) {
-        console.error('Failed to load data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
-
-  const handleLogin = async (email: string, password: string) => {
-    try {
-      setLoading(true); // Show loading state while authenticating
-
-      // 1. Authenticate with the server
-      const loggedInUser = await db.login(email.toLowerCase(), password);
-
-      // 2. Fetch the FULL user details (this ensures experienceAnswers are loaded)
-      const fullUser = await db.getUser(loggedInUser.id);
-
-      // 3. Set the state
-      setCurrentUser(fullUser);
-    } catch (err: any) {
-      // This will catch "Invalid credentials" or "User not found" from the server
-      console.error('Login Error:', err);
-      alert(err.message || 'Login failed. Please check your email and password.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async (userData: Partial<User>, password: string) => {
-    // 1. Check local state (optional but good)
-    if (users.some((u) => u.email.toLowerCase() === userData.email?.toLowerCase())) {
-      alert('An account with this email already exists.');
-      return;
-    }
-
-    try {
-      const newUser: User = {
-        rating: 0,
-        ratingCount: 0,
-        id: crypto.randomUUID(),
-        email: userData.email,
-        name: userData.name,
-        role: userData.role,
-        avatar: userData.avatar,
-        firstName: userData.name.split(' ')[0] || '',
-        surname: userData.surname.split(' ')[0] || '',
-        experienceAnswers: [],
-      };
-
-      // 3. Call the correct register endpoint with the password
-      const created = await db.register(newUser, password);
-
-      console.log(created);
-
-      // 4. Update local state
-      setUsers((prev) => [...prev, created]);
-      setCurrentUser(created);
-    } catch (error: any) {
-      // This will catch the "Email already exists" from the server too
-      alert(error.message || 'Failed to create account');
-      throw error; // Re-throw so AuthPage shows the error message
-    }
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-  };
-
-  const handleUpdateProfile = async (updatedUser: User) => {
-    const saved = await db.saveUser(updatedUser);
-    setUsers((prev) => prev.map((u) => (u.id === saved.id ? saved : u)));
-    setCurrentUser(saved);
-  };
-
-  const handlePostJob = async (job: Job) => {
-    const saved = await db.createJob(job);
-    setJobs((prev) => [...prev, saved]);
-  };
-
-  const handleUpdateJob = async (job: Job) => {
-    try {
-      const saved = await db.saveJob(job);
-      setJobs((prev) => prev.map((j) => (j.id === saved.id ? saved : j)));
-    } catch (error: any) {
-      // This catches the 403 error from the server
-      alert(error.message || 'This job is locked and cannot be edited.');
-    }
-  };
-
-  const handleCompleteJob = async (jobId: string) => {
-    if (!currentUser) return;
-    try {
-      const saved = await db.completeJob(jobId, currentUser.id);
-      setJobs((prev) => prev.map((j) => (j.id === saved.id ? saved : j)));
-    } catch (error: any) {
-      alert(error.message || 'Failed to complete job.');
-    }
-  };
-
-  const handleDeleteJob = async (jobId: string) => {
-    await db.deleteJob(jobId);
-    setJobs((prev) => prev.filter((j) => j.id !== jobId));
-  };
-
-  const handleApply = async (jobId: string, message: string) => {
-    if (!currentUser) return;
-    const newApp: Application = {
-      id: crypto.randomUUID(),
-      jobId,
-      maidId: currentUser.id,
-      status: ApplicationStatus.PENDING,
-      message,
-      appliedAt: new Date().toISOString(),
-    };
-    const saved = await db.createApplication(newApp);
-    setApplications((prev) => [...prev, saved]);
-
-    const job = jobs.find((j) => j.id === jobId);
-    if (job) {
-      const note: Notification = {
-        id: crypto.randomUUID(),
-        userId: job.clientId,
-        message: `New application from ${currentUser.name} for ${job.title}`,
-        type: 'info',
-        read: false,
-        timestamp: new Date().toISOString(),
-      };
-      const savedNote = await db.saveNotification(note);
-      setNotifications((prev) => [...prev, savedNote]);
-    }
-  };
-
-  const handleUpdateApplicationStatus = async (appId: string, status: ApplicationStatus) => {
-    try {
-      // 1. Use the PATCH endpoint we just created
-      // This triggers the backend logic to notify the maid and reject others
-      const result = await db.updateApplicationStatus(appId, status);
-
-      // 2. Update local state with the returned data
-      if (result.application) {
-        setApplications((prev) => prev.map((a) => (a.id === appId ? result.application : a)));
-      }
-      if (result.job) {
-        setJobs((prev) => prev.map((j) => (j.id === result.job.id ? result.job : j)));
-      }
-
-      // 3. Sync notifications (since the backend just created new ones)
-      const allNotes = await db.getNotifications();
-      setNotifications(allNotes);
-    } catch (error) {
-      alert('Failed to update application status');
-    }
-  };
-
-  const handleMarkNotificationsRead = async () => {
-    if (currentUser) {
-      await db.markNotificationsRead(currentUser.id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.userId === currentUser.id ? { ...n, read: true } : n))
-      );
-    }
-  };
-
-  const handleNotificationClick = async (notificationId: string) => {
-    try {
-      await db.markSingleNotificationRead(notificationId);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      );
-
-      // Optional: Logic to navigate user to the relevant page based on notification
-      // e.g., if message contains "job", navigate to dashboard
-    } catch (e) {
-      console.error('Failed to mark notification as read', e);
-    }
-  };
+  const { handleMarkNotificationsRead, handleNotificationClick } = useNotificationActions({
+    currentUser,
+    setNotifications,
+  });
 
   if (loading)
     return (
