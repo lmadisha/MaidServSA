@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Job, JobStatus, PaymentType } from '../../types';
+import { Job, JobStatus, PaymentType, User } from '../../types';
 import { generateJobDescription } from '../../services/geminiService';
 import { loadGoogleMaps } from '../../services/googleMaps';
 import { LocationAutocomplete } from '../LocationAutocomplete';
@@ -13,7 +13,9 @@ const JobModal: React.FC<{
   onClose: () => void;
   onSave: (job: Job) => void;
   clientId: string;
-}> = ({ job, isOpen, onClose, onSave, clientId }) => {
+  clientProfile?: User;
+  users?: User[];
+}> = ({ job, isOpen, onClose, onSave, clientId, clientProfile, users = [] }) => {
   // Use undefined for price and areaSize so the inputs can be empty
   const [formData, setFormData] = useState<Partial<Job>>({
     title: '',
@@ -118,11 +120,12 @@ const JobModal: React.FC<{
 
     event.preventDefault();
     const focusables = Array.from(
-      form.querySelectorAll<HTMLElement>('input, select, textarea, button')
-    ).filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1);
-    const index = focusables.indexOf(target);
-    if (index >= 0 && index < focusables.length - 1) {
-      focusables[index + 1].focus();
+      form.querySelectorAll('input, select, textarea, button')
+    ) as HTMLElement[];
+    const enabled = focusables.filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1);
+    const index = enabled.indexOf(target);
+    if (index >= 0 && index < enabled.length - 1) {
+      enabled[index + 1].focus();
     }
   };
 
@@ -132,12 +135,24 @@ const JobModal: React.FC<{
       return;
     }
     setLoadingAI(true);
+    const maidUsers = users.filter((u) => u.role === 'MAID');
+    const ratedMaids = maidUsers.filter((u) => (u.ratingCount || 0) > 0);
+    const averageRating =
+      ratedMaids.length > 0
+        ? (ratedMaids.reduce((sum, u) => sum + (u.rating || 0), 0) / ratedMaids.length).toFixed(2)
+        : '0.00';
+    const ratingSummary = `${ratedMaids.length} rated maids, average rating ${averageRating}/5`;
+
     const desc = await generateJobDescription(
       formData.rooms || 0,
       formData.bathrooms || 0,
       formData.areaSize || 0,
       formData.publicArea || '',
-      formData.title || 'General Cleaning'
+      formData.title || 'General Cleaning',
+      {
+        client: clientProfile,
+        maidRatingSummary: ratingSummary,
+      }
     );
     setFormData((prev) => ({ ...prev, description: desc }));
     setLoadingAI(false);

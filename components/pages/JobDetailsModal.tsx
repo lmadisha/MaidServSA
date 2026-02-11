@@ -58,7 +58,19 @@ const JobDetailsModal: React.FC<{
                   <>
                     <div className="flex flex-col sm:flex-row gap-4 text-sm text-gray-600 border-b border-gray-100 pb-4">
                       <div className="flex items-center">
-                        <IconMapPin className="w-4 h-4 mr-2 text-gray-400" /> {locationLabel}
+                        <IconMapPin className="w-4 h-4 mr-2 text-gray-400" />
+                        <a
+                          href={
+                            directionsUrl ||
+                            `https://maps.google.com/?q=${encodeURIComponent(locationLabel)}`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal-700 hover:text-teal-800 hover:underline"
+                          title="Open location in your maps app"
+                        >
+                          {locationLabel}
+                        </a>
                       </div>
                       <div className="flex items-center">
                         <IconClock className="w-4 h-4 mr-2 text-gray-400" /> {job.startTime} -{' '}

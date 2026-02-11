@@ -193,16 +193,14 @@ const MaidDashboard: React.FC<{
         onClose={() => setSelectedJob(null)}
         onApply={handleApplyClick}
       />
-      <JobDetailsModal
-        job={viewingJob}
-        onClose={() => setViewingJob(null)}
-        showApply={false}
-      />
+      <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} showApply={false} />
       <ApplyModal
         isOpen={showApplyModal}
         onClose={() => setShowApplyModal(false)}
         onSubmit={submitApplication}
         jobTitle={selectedJob?.title || ''}
+        job={selectedJob}
+        maid={user}
       />
 
       <MessageModal

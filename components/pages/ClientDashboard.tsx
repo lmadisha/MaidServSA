@@ -304,6 +304,8 @@ const ClientDashboard: React.FC<{
         }}
         job={editingJob}
         clientId={user.id}
+        clientProfile={user}
+        users={users}
       />
 
       <MessageModal
@@ -314,11 +316,7 @@ const ClientDashboard: React.FC<{
         otherUser={messageContext?.otherUser ?? null}
       />
 
-      <JobDetailsModal
-        job={viewingJob}
-        onClose={() => setViewingJob(null)}
-        showApply={false}
-      />
+      <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} showApply={false} />
     </div>
   );
 };
