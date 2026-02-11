@@ -186,7 +186,7 @@ function canViewPrivateLocation(row: any, viewer?: JobViewerContext): boolean {
   if (role === 'ADMIN') return true;
   if (role === 'CLIENT') return row.client_id === viewer.viewerId;
   if (role === 'MAID') {
-    return row.assigned_maid_id === viewer.viewerId || row.viewer_app_status === 'ACCEPTED';
+    return row.assigned_maid_id === viewer.viewerId || row.viewer_is_accepted === true;
   }
   return false;
 }
@@ -257,14 +257,17 @@ function getJobViewerContext(req: Request): JobViewerContext {
 
 function buildJobQuery(viewer: JobViewerContext, jobId?: string) {
   const params: any[] = [];
-  let join = '';
-  let viewerSelect = 'NULL as viewer_app_status';
+  let viewerSelect = 'FALSE as viewer_is_accepted';
 
   if (viewer.viewerRole === 'MAID' && viewer.viewerId) {
     params.push(viewer.viewerId);
-    join =
-      "LEFT JOIN applications viewer_app ON viewer_app.job_id = jobs.id AND viewer_app.maid_id = $1 AND viewer_app.status = 'ACCEPTED'";
-    viewerSelect = 'viewer_app.status as viewer_app_status';
+    viewerSelect = `EXISTS (
+      SELECT 1
+      FROM applications app
+      WHERE app.job_id = jobs.id
+        AND app.maid_id = $1
+        AND app.status = 'ACCEPTED'
+    ) as viewer_is_accepted`;
   }
 
   let where = '';
@@ -274,7 +277,7 @@ function buildJobQuery(viewer: JobViewerContext, jobId?: string) {
   }
 
   return {
-    sql: `SELECT ${JOB_SELECT}, ${viewerSelect} FROM jobs ${join} ${where}`,
+    sql: `SELECT ${JOB_SELECT}, ${viewerSelect} FROM jobs ${where}`,
     params,
   };
 }
