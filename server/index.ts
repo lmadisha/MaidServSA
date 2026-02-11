@@ -60,6 +60,12 @@ function toISODateOnly(v: any): string | null {
   return null;
 }
 
+function toTrimmedText(v: any): string | null {
+  if (v === null || v === undefined) return null;
+  const text = String(v).trim();
+  return text.length ? text : null;
+}
+
 async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
@@ -195,8 +201,8 @@ function mapJob(row: any, viewer?: JobViewerContext) {
     description: row.description ?? '',
     location: row.location ?? '',
     publicArea: row.public_area ?? row.location ?? '',
-    fullAddress: includePrivateLocation ? row.full_address ?? null : null,
-    placeId: includePrivateLocation ? row.place_id ?? null : null,
+    fullAddress: includePrivateLocation ? (row.full_address ?? null) : null,
+    placeId: includePrivateLocation ? (row.place_id ?? null) : null,
     latitude: includePrivateLocation ? toNumber(row.latitude) : null,
     longitude: includePrivateLocation ? toNumber(row.longitude) : null,
     areaSize: toNumber(row.area_size) ?? 0,
@@ -257,7 +263,7 @@ function buildJobQuery(viewer: JobViewerContext, jobId?: string) {
   if (viewer.viewerRole === 'MAID' && viewer.viewerId) {
     params.push(viewer.viewerId);
     join =
-      'LEFT JOIN applications viewer_app ON viewer_app.job_id = jobs.id AND viewer_app.maid_id = $1 AND viewer_app.status = \'ACCEPTED\'';
+      "LEFT JOIN applications viewer_app ON viewer_app.job_id = jobs.id AND viewer_app.maid_id = $1 AND viewer_app.status = 'ACCEPTED'";
     viewerSelect = 'viewer_app.status as viewer_app_status';
   }
 
@@ -345,7 +351,9 @@ async function getUserRole(userId: string): Promise<string | null> {
 }
 
 async function ensureMessagingSchema() {
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;`);
+  await pool.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;`
+  );
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_by UUID;`);
@@ -355,7 +363,9 @@ async function ensureMessagingSchema() {
       read_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (message_id, user_id)
     );`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reads_user_id ON message_reads(user_id);`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_message_reads_user_id ON message_reads(user_id);`
+  );
   await pool.query(`CREATE TABLE IF NOT EXISTS message_reports (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
@@ -367,7 +377,9 @@ async function ensureMessagingSchema() {
       reviewed_at TIMESTAMPTZ,
       resolution_note TEXT
     );`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reports_status ON message_reports(status);`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_message_reports_status ON message_reports(status);`
+  );
 }
 
 async function ensureJobsSchema() {
@@ -388,7 +400,10 @@ function normalizeAttachments(input: any): any[] {
     }));
 }
 
-async function validateAndNormalizeAttachments(attachments: any[], senderId: string): Promise<{
+async function validateAndNormalizeAttachments(
+  attachments: any[],
+  senderId: string
+): Promise<{
   valid: boolean;
   error?: string;
   attachments?: any[];
@@ -875,6 +890,12 @@ app.post(
     const j = req.body ?? {};
     const jobId = j.id ? toUuid(String(j.id)) : uuidv4();
     const clientId = toUuid(String(j.clientId));
+    const normalizedPublicArea = toTrimmedText(j.publicArea) ?? toTrimmedText(j.location);
+    const normalizedFullAddress =
+      toTrimmedText(j.fullAddress) ?? toTrimmedText(j.location) ?? normalizedPublicArea;
+    const normalizedPlaceId = toTrimmedText(j.placeId);
+    const normalizedLatitude = toNumber(j.latitude);
+    const normalizedLongitude = toNumber(j.longitude);
 
     const created = await withTx(async (client) => {
       const { rows } = await client.query(
@@ -903,12 +924,12 @@ app.post(
           j.assignedMaidId ? toUuid(String(j.assignedMaidId)) : null,
           j.title,
           j.description ?? null,
-          j.publicArea ?? j.location ?? null,
-          j.publicArea ?? null,
-          j.fullAddress ?? null,
-          j.placeId ?? null,
-          j.latitude ?? null,
-          j.longitude ?? null,
+          normalizedPublicArea,
+          normalizedPublicArea,
+          normalizedFullAddress,
+          normalizedPlaceId,
+          normalizedLatitude,
+          normalizedLongitude,
           j.areaSize ?? null,
           j.price ?? null,
           j.currency ?? 'R',
@@ -946,6 +967,12 @@ app.put(
   asyncHandler(async (req, res) => {
     const jobId = toUuid(req.params.id);
     const j = req.body ?? {};
+    const normalizedPublicArea = toTrimmedText(j.publicArea) ?? toTrimmedText(j.location);
+    const normalizedFullAddress =
+      toTrimmedText(j.fullAddress) ?? toTrimmedText(j.location) ?? normalizedPublicArea;
+    const normalizedPlaceId = toTrimmedText(j.placeId);
+    const normalizedLatitude = toNumber(j.latitude);
+    const normalizedLongitude = toNumber(j.longitude);
 
     const result = await withTx<{ job?: any; error?: string } | null>(async (client) => {
       const existing = await client.query(
@@ -995,12 +1022,12 @@ app.put(
           j.assignedMaidId ? toUuid(String(j.assignedMaidId)) : null,
           j.title ?? null,
           j.description ?? null,
-          j.publicArea ?? j.location ?? null,
-          j.publicArea ?? null,
-          j.fullAddress ?? null,
-          j.placeId ?? null,
-          j.latitude ?? null,
-          j.longitude ?? null,
+          normalizedPublicArea,
+          normalizedPublicArea,
+          normalizedFullAddress,
+          normalizedPlaceId,
+          normalizedLatitude,
+          normalizedLongitude,
           j.areaSize ?? null,
           j.price ?? null,
           j.currency ?? null,
@@ -1500,7 +1527,14 @@ app.post(
         VALUES ($1, $2, $3, $4, $5, $6, NOW())
         RETURNING id, job_id, sender_id, receiver_id, content, attachments, edited_at, deleted_at, timestamp;
       `,
-      [id, jobId, senderId, receiverId, content, JSON.stringify(attachmentValidation.attachments ?? [])]
+      [
+        id,
+        jobId,
+        senderId,
+        receiverId,
+        content,
+        JSON.stringify(attachmentValidation.attachments ?? []),
+      ]
     );
 
     const resolvedAttachments = await resolveAttachmentsWithUrls(rows[0].attachments ?? []);
@@ -1596,7 +1630,9 @@ app.delete(
       }
     }
     if (messageQ.rows[0].sender_id !== senderId && senderRole !== 'ADMIN') {
-      return res.status(403).json({ error: 'Only the sender or an admin can delete this message.' });
+      return res
+        .status(403)
+        .json({ error: 'Only the sender or an admin can delete this message.' });
     }
     if (messageQ.rows[0].deleted_at) {
       return res.status(400).json({ error: 'Message already deleted.' });

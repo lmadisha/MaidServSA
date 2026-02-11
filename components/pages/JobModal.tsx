@@ -111,6 +111,28 @@ const JobModal: React.FC<{
     }
   };
 
+  const geocodeAddress = async (address: string) => {
+    try {
+      const google = await loadGoogleMaps();
+      const geocoder = new google.maps.Geocoder();
+      return await new Promise<{ latitude: number | null; longitude: number | null }>((resolve) => {
+        geocoder.geocode({ address }, (results, status) => {
+          if (status === 'OK' && results?.[0]?.geometry?.location) {
+            resolve({
+              latitude: results[0].geometry.location.lat(),
+              longitude: results[0].geometry.location.lng(),
+            });
+            return;
+          }
+          resolve({ latitude: null, longitude: null });
+        });
+      });
+    } catch (error) {
+      console.warn('Unable to geocode address', error);
+      return { latitude: null, longitude: null };
+    }
+  };
+
   const handleFormKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
     if (event.defaultPrevented || event.key !== 'Enter' || event.shiftKey) return;
     const target = event.target as HTMLElement | null;
@@ -158,7 +180,7 @@ const JobModal: React.FC<{
     setLoadingAI(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Basic validation to ensure required numbers are present
@@ -175,6 +197,15 @@ const JobModal: React.FC<{
     const duration =
       parseInt(formData.endTime!.split(':')[0]) - parseInt(formData.startTime!.split(':')[0]);
 
+    let latitude = formData.latitude ?? null;
+    let longitude = formData.longitude ?? null;
+
+    if ((latitude === null || longitude === null) && formData.fullAddress) {
+      const geocoded = await geocodeAddress(formData.fullAddress);
+      latitude = geocoded.latitude;
+      longitude = geocoded.longitude;
+    }
+
     const newJob: Job = {
       id: job?.id || crypto.randomUUID(), // Use crypto for cleaner IDs
       clientId,
@@ -184,8 +215,8 @@ const JobModal: React.FC<{
       publicArea: formData.publicArea!,
       fullAddress: formData.fullAddress!,
       placeId: formData.placeId,
-      latitude: formData.latitude ?? null,
-      longitude: formData.longitude ?? null,
+      latitude,
+      longitude,
       areaSize: formData.areaSize!,
       price: formData.price!,
       currency: formData.currency!,
