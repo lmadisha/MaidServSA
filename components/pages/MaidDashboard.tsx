@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Application, ApplicationStatus, Job, JobStatus, User } from '../../types';
+import { db } from '../../services/db';
 import { IconMapPin } from '../Icons';
 import ApplyModal from './ApplyModal';
 import JobDetailsModal from './JobDetailsModal';
@@ -35,6 +36,24 @@ const MaidDashboard: React.FC<{
   );
 
   const myJobsList = jobs.filter((j) => myJobIds.includes(j.id) || j.assignedMaidId === user.id);
+
+  const fetchLatestJobForViewer = async (job: Job): Promise<Job> => {
+    try {
+      return await db.getJob(job.id, { viewerId: user.id, viewerRole: user.role });
+    } catch {
+      return job;
+    }
+  };
+
+  const openFindJobDetails = async (job: Job) => {
+    const freshJob = await fetchLatestJobForViewer(job);
+    setSelectedJob(freshJob);
+  };
+
+  const openAcceptedJobDetails = async (job: Job) => {
+    const freshJob = await fetchLatestJobForViewer(job);
+    setViewingJob(freshJob);
+  };
 
   const handleApplyClick = (job: Job) => {
     setSelectedJob(job);
@@ -109,7 +128,7 @@ const MaidDashboard: React.FC<{
                   <p className="mt-2 text-sm text-gray-600 line-clamp-2">{job.description}</p>
                   <div className="mt-4">
                     <button
-                      onClick={() => setSelectedJob(job)}
+                      onClick={() => openFindJobDetails(job)}
                       className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700"
                     >
                       View Details
@@ -163,7 +182,7 @@ const MaidDashboard: React.FC<{
                   {canMessage && client && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
-                        onClick={() => setViewingJob(job)}
+                        onClick={() => openAcceptedJobDetails(job)}
                         className="text-gray-600 hover:text-gray-800 text-xs font-medium border border-gray-200 px-2 py-1 rounded bg-white"
                       >
                         View Job
