@@ -60,6 +60,12 @@ function toISODateOnly(v: any): string | null {
   return null;
 }
 
+function toTrimmedText(v: any): string | null {
+  if (v === null || v === undefined) return null;
+  const text = String(v).trim();
+  return text.length ? text : null;
+}
+
 async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
@@ -116,6 +122,8 @@ function mapUser(row: any) {
 const JOB_SELECT = `
   id, client_id, assigned_maid_id,
   title, description, location,
+  public_area, full_address, place_id,
+  latitude, longitude,
   area_size, price, currency,
   date, status, rooms, bathrooms,
   images, payment_type, start_time, end_time,
@@ -167,7 +175,24 @@ async function autoCompleteOverdueJobs(jobId?: string): Promise<void> {
   });
 }
 
-function mapJob(row: any) {
+type JobViewerContext = {
+  viewerId?: string | null;
+  viewerRole?: string | null;
+};
+
+function canViewPrivateLocation(row: any, viewer?: JobViewerContext): boolean {
+  if (!viewer?.viewerId || !viewer?.viewerRole) return false;
+  const role = viewer.viewerRole.toUpperCase();
+  if (role === 'ADMIN') return true;
+  if (role === 'CLIENT') return row.client_id === viewer.viewerId;
+  if (role === 'MAID') {
+    return row.assigned_maid_id === viewer.viewerId || row.viewer_is_accepted === true;
+  }
+  return false;
+}
+
+function mapJob(row: any, viewer?: JobViewerContext) {
+  const includePrivateLocation = canViewPrivateLocation(row, viewer);
   return {
     id: row.id,
     clientId: row.client_id,
@@ -175,6 +200,11 @@ function mapJob(row: any) {
     title: row.title,
     description: row.description ?? '',
     location: row.location ?? '',
+    publicArea: row.public_area ?? row.location ?? '',
+    fullAddress: includePrivateLocation ? (row.full_address ?? null) : null,
+    placeId: includePrivateLocation ? (row.place_id ?? null) : null,
+    latitude: includePrivateLocation ? toNumber(row.latitude) : null,
+    longitude: includePrivateLocation ? toNumber(row.longitude) : null,
     areaSize: toNumber(row.area_size) ?? 0,
     price: toNumber(row.price) ?? 0,
     currency: row.currency ?? 'R',
@@ -213,6 +243,42 @@ function mapNotification(row: any) {
     type: row.type,
     read: !!row.read,
     timestamp: row.timestamp?.toISOString?.() ?? null,
+  };
+}
+
+function getJobViewerContext(req: Request): JobViewerContext {
+  const viewerIdRaw = String(req.query.viewerId ?? '');
+  const viewerRoleRaw = String(req.query.viewerRole ?? '');
+  return {
+    viewerId: viewerIdRaw ? toUuid(viewerIdRaw) : null,
+    viewerRole: viewerRoleRaw ? viewerRoleRaw.toUpperCase() : null,
+  };
+}
+
+function buildJobQuery(viewer: JobViewerContext, jobId?: string) {
+  const params: any[] = [];
+  let viewerSelect = 'FALSE as viewer_is_accepted';
+
+  if (viewer.viewerRole === 'MAID' && viewer.viewerId) {
+    params.push(viewer.viewerId);
+    viewerSelect = `EXISTS (
+      SELECT 1
+      FROM applications app
+      WHERE app.job_id = jobs.id
+        AND app.maid_id = $1
+        AND app.status = 'ACCEPTED'
+    ) as viewer_is_accepted`;
+  }
+
+  let where = '';
+  if (jobId) {
+    params.push(jobId);
+    where = `WHERE jobs.id = $${params.length}`;
+  }
+
+  return {
+    sql: `SELECT ${JOB_SELECT}, ${viewerSelect} FROM jobs ${where}`,
+    params,
   };
 }
 
@@ -288,7 +354,9 @@ async function getUserRole(userId: string): Promise<string | null> {
 }
 
 async function ensureMessagingSchema() {
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;`);
+  await pool.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;`
+  );
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_by UUID;`);
@@ -298,7 +366,9 @@ async function ensureMessagingSchema() {
       read_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (message_id, user_id)
     );`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reads_user_id ON message_reads(user_id);`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_message_reads_user_id ON message_reads(user_id);`
+  );
   await pool.query(`CREATE TABLE IF NOT EXISTS message_reports (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
@@ -310,7 +380,17 @@ async function ensureMessagingSchema() {
       reviewed_at TIMESTAMPTZ,
       resolution_note TEXT
     );`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_message_reports_status ON message_reports(status);`);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_message_reports_status ON message_reports(status);`
+  );
+}
+
+async function ensureJobsSchema() {
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS public_area TEXT;`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS full_address TEXT;`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS place_id TEXT;`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,6);`);
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,6);`);
 }
 
 function normalizeAttachments(input: any): any[] {
@@ -323,7 +403,10 @@ function normalizeAttachments(input: any): any[] {
     }));
 }
 
-async function validateAndNormalizeAttachments(attachments: any[], senderId: string): Promise<{
+async function validateAndNormalizeAttachments(
+  attachments: any[],
+  senderId: string
+): Promise<{
   valid: boolean;
   error?: string;
   attachments?: any[];
@@ -755,10 +838,10 @@ app.get(
   '/api/jobs',
   asyncHandler(async (_req, res) => {
     await autoCompleteOverdueJobs();
-    const { rows } = await pool.query(`SELECT ${JOB_SELECT}
-                                       FROM jobs
-                                       ORDER BY created_at DESC;`);
-    res.json(rows.map(mapJob));
+    const viewer = getJobViewerContext(_req);
+    const { sql, params } = buildJobQuery(viewer);
+    const { rows } = await pool.query(`${sql} ORDER BY created_at DESC;`, params);
+    res.json(rows.map((row) => mapJob(row, viewer)));
   })
 );
 
@@ -767,14 +850,11 @@ app.get(
   asyncHandler(async (req, res) => {
     const id = toUuid(req.params.id);
     await autoCompleteOverdueJobs(id);
-    const { rows } = await pool.query(
-      `SELECT ${JOB_SELECT}
-                                       FROM jobs
-                                       WHERE id = $1 LIMIT 1;`,
-      [id]
-    );
+    const viewer = getJobViewerContext(req);
+    const { sql, params } = buildJobQuery(viewer, id);
+    const { rows } = await pool.query(`${sql} LIMIT 1;`, params);
     if (!rows.length) return res.status(404).json({ error: 'Job not found' });
-    res.json(mapJob(rows[0]));
+    res.json(mapJob(rows[0], viewer));
   })
 );
 
@@ -813,12 +893,20 @@ app.post(
     const j = req.body ?? {};
     const jobId = j.id ? toUuid(String(j.id)) : uuidv4();
     const clientId = toUuid(String(j.clientId));
+    const normalizedPublicArea = toTrimmedText(j.publicArea) ?? toTrimmedText(j.location);
+    const normalizedFullAddress =
+      toTrimmedText(j.fullAddress) ?? toTrimmedText(j.location) ?? normalizedPublicArea;
+    const normalizedPlaceId = toTrimmedText(j.placeId);
+    const normalizedLatitude = toNumber(j.latitude);
+    const normalizedLongitude = toNumber(j.longitude);
 
     const created = await withTx(async (client) => {
       const { rows } = await client.query(
         `
           INSERT INTO jobs (id, client_id, assigned_maid_id,
                             title, description, location,
+                            public_area, full_address, place_id,
+                            latitude, longitude,
                             area_size, price, currency,
                             date, status, rooms, bathrooms,
                             images, payment_type, start_time, end_time,
@@ -826,9 +914,11 @@ app.post(
           VALUES ($1, $2, $3,
                   $4, $5, $6,
                   $7, $8, $9,
-                  $10, $11, $12, $13,
-                  $14, $15, $16, $17,
-                  $18, $19)
+                  $10, $11,
+                  $12, $13, $14,
+                  $15, $16, $17, $18,
+                  $19, $20, $21, $22,
+                  $23, $24)
             RETURNING ${JOB_SELECT};
         `,
         [
@@ -837,7 +927,12 @@ app.post(
           j.assignedMaidId ? toUuid(String(j.assignedMaidId)) : null,
           j.title,
           j.description ?? null,
-          j.location ?? null,
+          normalizedPublicArea,
+          normalizedPublicArea,
+          normalizedFullAddress,
+          normalizedPlaceId,
+          normalizedLatitude,
+          normalizedLongitude,
           j.areaSize ?? null,
           j.price ?? null,
           j.currency ?? 'R',
@@ -862,7 +957,7 @@ app.post(
         [jobId, j.status ?? 'OPEN', 'Job posted']
       );
 
-      return mapJob(rows[0]);
+      return mapJob(rows[0], { viewerId: clientId, viewerRole: 'CLIENT' });
     });
 
     res.status(201).json(created);
@@ -875,6 +970,12 @@ app.put(
   asyncHandler(async (req, res) => {
     const jobId = toUuid(req.params.id);
     const j = req.body ?? {};
+    const normalizedPublicArea = toTrimmedText(j.publicArea) ?? toTrimmedText(j.location);
+    const normalizedFullAddress =
+      toTrimmedText(j.fullAddress) ?? toTrimmedText(j.location) ?? normalizedPublicArea;
+    const normalizedPlaceId = toTrimmedText(j.placeId);
+    const normalizedLatitude = toNumber(j.latitude);
+    const normalizedLongitude = toNumber(j.longitude);
 
     const result = await withTx<{ job?: any; error?: string } | null>(async (client) => {
       const existing = await client.query(
@@ -897,20 +998,25 @@ app.put(
           SET assigned_maid_id = $2,
               title            = COALESCE($3, title),
               description      = $4,
-              location         = $5,
-              area_size        = $6,
-              price            = $7,
-              currency         = COALESCE($8, currency),
-              date             = $9,
-              status           = COALESCE($10, status),
-              rooms            = $11,
-              bathrooms        = $12,
-              images           = COALESCE($13, images),
-              payment_type     = COALESCE($14, payment_type),
-              start_time       = $15,
-              end_time         = $16,
-              duration         = $17,
-              work_dates       = COALESCE($18, work_dates),
+              location         = COALESCE($5, location),
+              public_area      = COALESCE($6, public_area),
+              full_address     = COALESCE($7, full_address),
+              place_id         = COALESCE($8, place_id),
+              latitude         = COALESCE($9, latitude),
+              longitude        = COALESCE($10, longitude),
+              area_size        = $11,
+              price            = $12,
+              currency         = COALESCE($13, currency),
+              date             = $14,
+              status           = COALESCE($15, status),
+              rooms            = $16,
+              bathrooms        = $17,
+              images           = COALESCE($18, images),
+              payment_type     = COALESCE($19, payment_type),
+              start_time       = $20,
+              end_time         = $21,
+              duration         = $22,
+              work_dates       = COALESCE($23, work_dates),
               updated_at       = NOW()
           WHERE id = $1
            RETURNING ${JOB_SELECT};`,
@@ -919,7 +1025,12 @@ app.put(
           j.assignedMaidId ? toUuid(String(j.assignedMaidId)) : null,
           j.title ?? null,
           j.description ?? null,
-          j.location ?? null,
+          normalizedPublicArea,
+          normalizedPublicArea,
+          normalizedFullAddress,
+          normalizedPlaceId,
+          normalizedLatitude,
+          normalizedLongitude,
           j.areaSize ?? null,
           j.price ?? null,
           j.currency ?? null,
@@ -947,7 +1058,7 @@ app.put(
         );
       }
 
-      return { job: mapJob(updatedRow) };
+      return { job: mapJob(updatedRow, { viewerId: updatedRow.client_id, viewerRole: 'CLIENT' }) };
     });
 
     // Handle results OUTSIDE the transaction block
@@ -990,7 +1101,7 @@ app.patch(
         const { rows } = await client.query(`SELECT ${JOB_SELECT} FROM jobs WHERE id = $1`, [
           jobId,
         ]);
-        return { job: mapJob(rows[0]) };
+        return { job: mapJob(rows[0], { viewerId: clientId, viewerRole: 'CLIENT' }) };
       }
       if (status !== 'IN_PROGRESS') {
         return { error: 'INVALID_STATUS' as const };
@@ -1015,7 +1126,7 @@ app.patch(
         [jobId, rows[0].status, 'Client marked job as completed']
       );
 
-      return { job: mapJob(rows[0]) };
+      return { job: mapJob(rows[0], { viewerId: clientId, viewerRole: 'CLIENT' }) };
     });
 
     if (!result) return res.status(404).json({ error: 'Job not found' });
@@ -1278,7 +1389,7 @@ app.patch(
 
         return {
           application: mapApplication(updatedAppQ.rows[0]),
-          job: mapJob(updatedJobQ.rows[0]),
+          job: mapJob(updatedJobQ.rows[0], { viewerId: clientId, viewerRole: 'CLIENT' }),
         };
       }
 
@@ -1419,7 +1530,14 @@ app.post(
         VALUES ($1, $2, $3, $4, $5, $6, NOW())
         RETURNING id, job_id, sender_id, receiver_id, content, attachments, edited_at, deleted_at, timestamp;
       `,
-      [id, jobId, senderId, receiverId, content, JSON.stringify(attachmentValidation.attachments ?? [])]
+      [
+        id,
+        jobId,
+        senderId,
+        receiverId,
+        content,
+        JSON.stringify(attachmentValidation.attachments ?? []),
+      ]
     );
 
     const resolvedAttachments = await resolveAttachmentsWithUrls(rows[0].attachments ?? []);
@@ -1515,7 +1633,9 @@ app.delete(
       }
     }
     if (messageQ.rows[0].sender_id !== senderId && senderRole !== 'ADMIN') {
-      return res.status(403).json({ error: 'Only the sender or an admin can delete this message.' });
+      return res
+        .status(403)
+        .json({ error: 'Only the sender or an admin can delete this message.' });
     }
     if (messageQ.rows[0].deleted_at) {
       return res.status(400).json({ error: 'Message already deleted.' });
@@ -1961,8 +2081,8 @@ wss.on('connection', async (socket, req) => {
   }
 });
 
-ensureMessagingSchema().catch((err) => {
-  console.error('Failed to ensure messaging schema', err);
+Promise.all([ensureMessagingSchema(), ensureJobsSchema()]).catch((err) => {
+  console.error('Failed to ensure DB schema', err);
 });
 
 server.listen(PORT, () => {

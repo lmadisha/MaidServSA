@@ -148,6 +148,11 @@ CREATE TABLE public.jobs (
     title text NOT NULL,
     description text,
     location text,
+    public_area text,
+    full_address text,
+    place_id text,
+    latitude numeric(10,6),
+    longitude numeric(10,6),
     area_size integer,
     price numeric(10,2),
     currency text DEFAULT 'R'::text,
@@ -559,4 +564,3 @@ ALTER TABLE ONLY public.reviews
 --
 
 \unrestrict J0MsgKMmh6ELQ81anMcBKtBfKVuXBWjhPF8wWabihtERuRdiLsgUKdQYDocdqyQ
-

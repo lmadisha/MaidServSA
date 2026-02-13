@@ -5,6 +5,7 @@ import { loadGoogleMaps } from '../services/googleMaps.ts';
 interface Props {
   value: string;
   onChange: (value: string) => void;
+  onPlaceSelect?: (place: UiSuggestion) => void;
   placeholder?: string;
   className?: string;
   required?: boolean;
@@ -13,6 +14,7 @@ interface Props {
 
 type UiSuggestion = {
   id: string;
+  placeId?: string;
   description: string;
   mainText: string;
   secondaryText: string;
@@ -21,6 +23,7 @@ type UiSuggestion = {
 export const LocationAutocomplete: React.FC<Props> = ({
   value,
   onChange,
+  onPlaceSelect,
   placeholder,
   className,
   required,
@@ -101,6 +104,7 @@ export const LocationAutocomplete: React.FC<Props> = ({
           const secondaryText = p.structuredFormat?.secondaryText?.toString?.() ?? '';
           return {
             id: p.placeId ?? description,
+            placeId: p.placeId ?? null,
             description,
             mainText,
             secondaryText,
@@ -126,6 +130,7 @@ export const LocationAutocomplete: React.FC<Props> = ({
           if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
             const mapped: UiSuggestion[] = predictions.map((p) => ({
               id: p.place_id,
+              placeId: p.place_id,
               description: p.description,
               mainText: p.structured_formatting?.main_text ?? '',
               secondaryText: p.structured_formatting?.secondary_text ?? '',
@@ -155,6 +160,7 @@ export const LocationAutocomplete: React.FC<Props> = ({
 
   const handleSelect = (s: UiSuggestion) => {
     onChange(s.description);
+    onPlaceSelect?.(s);
     setShow(false);
     setActiveIndex(-1);
     // Refresh session token (billing best practice)

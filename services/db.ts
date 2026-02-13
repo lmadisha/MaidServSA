@@ -1,4 +1,4 @@
-import type { Application, Job, Message, Notification, User } from '../types';
+import type { Application, Job, Message, Notification, User, UserRole } from '../types';
 
 const API_BASE = '/api';
 
@@ -92,11 +92,25 @@ class DBService {
   }
 
   // ---------------- JOBS ----------------
-  getJobs(): Promise<Job[]> {
+  getJobs(viewer?: { viewerId?: string; viewerRole?: UserRole }): Promise<Job[]> {
+    if (viewer?.viewerId && viewer?.viewerRole) {
+      const params = new URLSearchParams({
+        viewerId: viewer.viewerId,
+        viewerRole: viewer.viewerRole,
+      });
+      return api<Job[]>(`/jobs?${params.toString()}`);
+    }
     return api<Job[]>('/jobs');
   }
 
-  getJob(jobId: string): Promise<Job> {
+  getJob(jobId: string, viewer?: { viewerId?: string; viewerRole?: UserRole }): Promise<Job> {
+    if (viewer?.viewerId && viewer?.viewerRole) {
+      const params = new URLSearchParams({
+        viewerId: viewer.viewerId,
+        viewerRole: viewer.viewerRole,
+      });
+      return api<Job>(`/jobs/${jobId}?${params.toString()}`);
+    }
     return api<Job>(`/jobs/${jobId}`);
   }
 

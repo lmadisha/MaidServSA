@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { generateApplicationMessage } from '../../services/geminiService';
+import { Job, User } from '../../types';
+import { IconSparkles } from '../Icons';
 import { INPUT_CLASS } from './formStyles';
 
 const ApplyModal: React.FC<{
@@ -6,8 +9,37 @@ const ApplyModal: React.FC<{
   onClose: () => void;
   onSubmit: (message: string) => void;
   jobTitle: string;
-}> = ({ isOpen, onClose, onSubmit, jobTitle }) => {
+  job?: Job | null;
+  maid?: User;
+}> = ({ isOpen, onClose, onSubmit, jobTitle, job, maid }) => {
   const [message, setMessage] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!job || !maid) return;
+    setIsGenerating(true);
+    const generated = await generateApplicationMessage(
+      {
+        title: job.title,
+        description: job.description,
+        publicArea: job.publicArea,
+        location: job.location,
+        rooms: job.rooms,
+        bathrooms: job.bathrooms,
+        areaSize: job.areaSize,
+      },
+      {
+        name: maid.name,
+        bio: maid.bio,
+        experienceAnswers: maid.experienceAnswers,
+        cvFileName: maid.cvFileName,
+        rating: maid.rating,
+        ratingCount: maid.ratingCount,
+      }
+    );
+    setMessage(generated);
+    setIsGenerating(false);
+  };
 
   if (!isOpen) return null;
 
@@ -23,6 +55,17 @@ const ApplyModal: React.FC<{
             <p className="text-sm text-gray-500 mb-4">
               Introduce yourself to the client. Mention your experience and why you are a good fit.
             </p>
+            <div className="flex justify-end mb-2">
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={isGenerating || !job || !maid}
+                className="text-xs text-teal-600 hover:text-teal-800 flex items-center disabled:opacity-60"
+              >
+                <IconSparkles className="w-3 h-3 mr-1" />
+                {isGenerating ? 'Generating...' : 'Generate with AI'}
+              </button>
+            </div>
             <textarea
               className={INPUT_CLASS}
               rows={4}

@@ -148,7 +148,8 @@ const ClientDashboard: React.FC<{
                   <div>
                     <h3 className="text-lg leading-6 font-medium text-gray-900">{job.title}</h3>
                     <p className="mt-1 max-w-2xl text-sm text-gray-500">
-                      {job.location} • {new Date(job.date).toLocaleDateString()}
+                      {job.fullAddress || job.publicArea || job.location} •{' '}
+                      {new Date(job.date).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -303,6 +304,8 @@ const ClientDashboard: React.FC<{
         }}
         job={editingJob}
         clientId={user.id}
+        clientProfile={user}
+        users={users}
       />
 
       <MessageModal
@@ -313,11 +316,7 @@ const ClientDashboard: React.FC<{
         otherUser={messageContext?.otherUser ?? null}
       />
 
-      <JobDetailsModal
-        job={viewingJob}
-        onClose={() => setViewingJob(null)}
-        showApply={false}
-      />
+      <JobDetailsModal job={viewingJob} onClose={() => setViewingJob(null)} showApply={false} />
     </div>
   );
 };
